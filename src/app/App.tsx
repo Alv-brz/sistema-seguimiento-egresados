@@ -10,9 +10,10 @@ import {
   CheckCircle, AlertCircle, Clock, Download, Upload, Info, X,
   ShieldCheck, RefreshCw,
 } from "lucide-react";
+import { authenticateUser, type AuthRole } from "./auth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Role = "admin" | "empresa" | "egresado";
+type Role = AuthRole;
 type Screen =
   | "login"
   | "admin-dashboard" | "admin-egresados" | "admin-empresas"
@@ -318,6 +319,7 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
   const [password, setPassword] = useState("");
   const [correo, setCorreo] = useState("");
   const [enviado, setEnviado] = useState(false);
+  const [loginError, setLoginError] = useState("");
 
   const inp: React.CSSProperties = { width: "100%", padding: "11px 14px 11px 42px", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 14, color: "#0F172A", background: "#F9FAFB", outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
 
@@ -326,6 +328,25 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
     { role: "empresa", label: "Empresa", desc: "Finanzas Ugarte S.R.L. — Publicar ofertas", icon: <Building2 size={15} /> },
     { role: "egresado", label: "Egresado", desc: "bartolomé.vicente85683 — Bolsa laboral", icon: <GraduationCap size={15} /> },
   ];
+
+  function handleSubmit() {
+    const result = authenticateUser(usuario, password);
+
+    if (result.ok) {
+      setLoginError("");
+      onLogin(result.role);
+      return;
+    }
+
+    const messages: Record<typeof result.reason, string> = {
+      empty: "Ingresa nombre de usuario y contraseña.",
+      invalid: "Credenciales inválidas.",
+      inactive: "El usuario se encuentra inactivo.",
+      "role-not-found": "El usuario no tiene un rol asignado.",
+    };
+
+    setLoginError(messages[result.reason]);
+  }
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", fontFamily: "Inter, sans-serif" }}>
@@ -358,16 +379,17 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
             <p style={{ color: "#64748B", fontSize: 14, marginBottom: 32 }}>Ingresa tu nombre_usuario y password (tabla: usuario).</p>
             <div style={{ marginBottom: 20 }}>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Nombre de usuario (nombre_usuario)</label>
-              <div style={{ position: "relative" }}><User size={16} style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} /><input style={inp} placeholder="nombre_usuario" value={usuario} onChange={e => setUsuario(e.target.value)} /></div>
+              <div style={{ position: "relative" }}><User size={16} style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} /><input style={inp} placeholder="nombre_usuario" value={usuario} onChange={e => { setUsuario(e.target.value); setLoginError(""); }} onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }} /></div>
             </div>
             <div style={{ marginBottom: 10 }}>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Contraseña (password)</label>
-              <div style={{ position: "relative" }}><Lock size={16} style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} /><input style={inp} type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} /></div>
+              <div style={{ position: "relative" }}><Lock size={16} style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} /><input style={inp} type="password" placeholder="••••••••" value={password} onChange={e => { setPassword(e.target.value); setLoginError(""); }} onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }} /></div>
             </div>
+            {loginError && <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 8, background: "#FEE2E2", color: "#991B1B", fontSize: 12, fontWeight: 500 }}>{loginError}</div>}
             <div style={{ textAlign: "right", marginBottom: 28 }}>
               <button onClick={() => setView("recuperar")} style={{ fontSize: 13, color: "#2563EB", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>¿Olvidaste tu contraseña?</button>
             </div>
-            <button onClick={() => onLogin("admin")} style={{ width: "100%", padding: "13px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Iniciar Sesión</button>
+            <button onClick={handleSubmit} style={{ width: "100%", padding: "13px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Iniciar Sesión</button>
           </div>
         ) : (
           /* Recuperación de contraseña — tabla: recuperacion_password (token, fecha_expiracion) */
