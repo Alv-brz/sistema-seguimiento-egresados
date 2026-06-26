@@ -1,0 +1,385 @@
+# AI_CONTEXT
+
+Contexto tecnico permanente del proyecto. Toda sesion futura debe leer este archivo y `PROJECT_STATUS.md` antes de implementar cambios.
+
+## Proyecto
+
+Sistema de Seguimiento de Egresados y Bolsa Laboral para la Universidad de Huanuco (UDH).
+
+El repositorio combina:
+
+- Frontend React/Vite en `src/`.
+- Backend REST Express/TypeScript en `backend/`.
+- Base de datos MySQL documentada por scripts SQL en `Database/`.
+
+La base de datos es la fuente de verdad del dominio. El frontend actual ya contiene pantallas y datos mock alineados a tablas reales, pero solo la autenticacion esta integrada contra el backend.
+
+## Tecnologias
+
+Frontend:
+
+- React 18.3.1.
+- Vite 6.3.5.
+- TypeScript/TSX.
+- Tailwind CSS 4 mediante `@tailwindcss/vite`.
+- Componentes base shadcn/ui y Radix UI en `src/app/components/ui/`.
+- Iconos `lucide-react`.
+- Graficos con `recharts`.
+- Estilos principalmente inline en `src/app/App.tsx`, mas CSS global en `src/styles/`.
+
+Backend:
+
+- Node.js con Express 4.
+- TypeScript 5, modulo `NodeNext`, salida compilada en `backend/dist`.
+- `tsx watch` para desarrollo.
+- MySQL con `mysql2/promise`.
+- JWT con `jsonwebtoken`.
+- CORS con origen configurable.
+- Variables de entorno con `dotenv`.
+
+Base de datos:
+
+- MySQL.
+- Base: `seg_egresado_bolsa`.
+- Scripts en `Database/` para esquema, datos, usuarios, vistas, funciones, procedimientos y triggers.
+
+## Organizacion de Carpetas
+
+Raiz:
+
+- `package.json`: scripts del frontend (`npm run dev`, `npm run build`).
+- `vite.config.ts`: configuracion Vite, React, Tailwind, alias `@ -> src`, resolver `figma:asset/*`.
+- `README.md`: instrucciones originales del bundle Figma Make.
+- `ATTRIBUTIONS.md`: atribuciones shadcn/ui y Unsplash.
+- `default_shadcn_theme.css`: tema original.
+- `AI_CONTEXT.md`: este documento.
+- `PROJECT_STATUS.md`: estado historico y fases.
+
+Frontend:
+
+- `src/main.tsx`: monta React en `#root`.
+- `src/app/App.tsx`: aplicacion principal, rutas internas por estado, pantallas por rol, UI, datos mock y navegacion.
+- `src/app/auth.ts`: cliente de autenticacion contra el backend y persistencia de sesion en `localStorage`.
+- `src/app/components/ui/`: componentes shadcn/ui/Radix disponibles.
+- `src/app/components/figma/ImageWithFallback.tsx`: helper Figma.
+- `src/styles/`: CSS global, tema, fuentes y Tailwind.
+
+Backend:
+
+- `backend/package.json`: scripts `dev`, `build`, `start`.
+- `backend/tsconfig.json`: TypeScript estricto con `moduleResolution: NodeNext`.
+- `backend/src/server.ts`: arranque HTTP.
+- `backend/src/app.ts`: crea Express app, middlewares y rutas.
+- `backend/src/config/env.ts`: carga y valida variables de entorno.
+- `backend/src/config/db.ts`: pool MySQL.
+- `backend/src/config/jwt.ts`: firma y verifica JWT.
+- `backend/src/middleware/errorHandler.ts`: async handler y errores centralizados.
+- `backend/src/modules/health/`: endpoint `GET /api/health`.
+- `backend/src/modules/auth/`: login, middleware JWT, resolucion de roles y endpoint `GET /api/auth/me`.
+
+Base de datos:
+
+- `Database/Proyecto BD seguimiento egresado.sql`: crea la BD, tablas e inserts masivos.
+- `Database/Usuarios.sql`: roles/usuarios MySQL y grants.
+- `Database/Vistas.sql`: vistas de consulta.
+- `Database/Funciones.sql`: funciones SQL.
+- `Database/Procedimientos Almacenados.sql`: procedimientos CRUD/reportes.
+- `Database/Triggers.sql`: auditoria.
+- `Database/Triggers Signal.sql`: validaciones con `SIGNAL`.
+- `Database/Modelos_bd.png`: modelo visual.
+
+## Arquitectura Actual
+
+El frontend es una SPA sin router externo. `App.tsx` mantiene `session` y `screen` en estado React. La pantalla activa se decide con un `switch` sobre un union type `Screen`.
+
+Roles soportados:
+
+- `admin`
+- `empresa`
+- `egresado`
+
+Cada rol tiene:
+
+- pantalla inicial en `HOME_BY_ROLE`.
+- conjunto permitido en `ROLE_SCREENS`.
+- menu lateral en `MENUS`.
+
+El backend es una API REST modular bajo `/api`:
+
+- `GET /api/health`: valida que el pool pueda ejecutar `SELECT 1 AS ok`.
+- `POST /api/auth/login`: valida usuario/password contra MySQL.
+- `GET /api/auth/me`: valida JWT Bearer y reconstruye la sesion desde MySQL.
+- `GET /api/admin/dashboard`: resumen y graficos del administrador desde MySQL.
+- `GET /api/egresados`: listado de lectura para gestion admin de egresados.
+- `GET /api/empresas`: listado de lectura para gestion admin de empresas.
+- `GET /api/ofertas`: listado de lectura para gestion admin de ofertas.
+- `GET /api/encuestas`: listado de lectura para gestion admin de encuestas.
+- `GET /api/auditoria`: listado de lectura para auditoria.
+- `GET /api/notificaciones`: notificaciones del usuario autenticado.
+
+Los endpoints de lectura inicial estan implementados para pantallas de administrador. Empresa y egresado conservan comportamiento mock en esta fase. No hay todavia endpoints de escritura ni CRUD.
+
+## Flujo Frontend/Backend
+
+1. El usuario ve `LoginScreen` si no hay sesion valida en `localStorage`.
+2. `src/app/auth.ts` llama a `POST {VITE_API_URL}/auth/login`.
+3. Si el backend devuelve `{ ok: true, session }`, el frontend guarda la sesion en `localStorage` con key `seg_egresado_bolsa.session`.
+4. `App.tsx` asigna la pantalla inicial segun el rol.
+5. La navegacion se hace con `setScreen`, que valida permisos mediante `canAccessScreen`.
+6. El logout elimina la sesion local y vuelve al login.
+
+Valor por defecto de `VITE_API_URL`:
+
+- `http://localhost:3001/api`
+
+Valor por defecto de CORS en backend:
+
+- `FRONTEND_ORIGIN=http://localhost:5173`
+
+Para futuras llamadas autenticadas, usar:
+
+- Header `Authorization: Bearer <session.token>`.
+- El token ya queda disponible en `AuthSession.token`.
+
+La capa frontend reutilizable esta en `src/app/api.ts`:
+
+- Centraliza `VITE_API_URL`.
+- Lee el token desde `readStoredSession()`.
+- Envia `Authorization: Bearer <token>` cuando existe sesion.
+- Expone `adminApi` para dashboard, egresados, empresas, ofertas, encuestas, auditoria y notificaciones.
+- Las pantallas admin usan datos reales con fallback a los mocks locales si la API no esta disponible.
+
+## Modelo de Autenticacion
+
+Frontend:
+
+- Archivo: `src/app/auth.ts`.
+- Tipos: `AuthRole`, `AuthSession`, `AuthResult`.
+- Credenciales demo:
+  - admin: `admin.general001` / `Admin123*`
+  - empresa: `finanzasugartes14768` / `%0r1MFj6Qp`
+  - egresado: `bartolomé.vicente85683` / `&19LW%iOD&`
+- La sesion guardada debe cumplir:
+  - `id_usuario: number`
+  - `nombre_usuario: string`
+  - `role: "admin" | "empresa" | "egresado"`
+  - `token: string`
+
+Backend:
+
+- `auth.service.ts` consulta tabla `usuario`.
+- Password actual en texto plano, porque la BD actual lo almacena asi. No introducir bcrypt sin una fase explicita de migracion de datos.
+- Usuarios inactivos devuelven `inactive`.
+- Usuario o password incorrecto devuelven `invalid`.
+- El rol se resuelve por pertenencia de `id_usuario` a:
+  - `administrador`
+  - `empresa`
+  - `egresado`
+- Orden de resolucion: administrador > empresa > egresado.
+- JWT payload minimo:
+  - `id_usuario`
+  - `role`
+- `GET /api/auth/me` reconstruye sesion desde MySQL y valida que el rol del token coincida.
+
+## Conexion MySQL
+
+Configuracion en `backend/src/config/env.ts`:
+
+- `PORT`, default `3001`.
+- `FRONTEND_ORIGIN`, default `http://localhost:5173`.
+- `DB_HOST`, default `localhost`.
+- `DB_PORT`, default `3306`.
+- `DB_USER`, default `admin_general`.
+- `DB_PASSWORD`, requerida.
+- `DB_NAME`, default `seg_egresado_bolsa`.
+- `DB_CONNECTION_LIMIT`, default `10`.
+- `JWT_SECRET`, requerida.
+- `JWT_EXPIRES_IN`, default `8h`.
+
+Pool en `backend/src/config/db.ts`:
+
+- `mysql.createPool`.
+- `decimalNumbers: true`.
+- `dateStrings: true`.
+- `charset: "utf8mb4"`.
+- usuario esperado: `admin_general`, definido en `Database/Usuarios.sql`.
+
+## Modelo de Datos Principal
+
+Tablas principales detectadas en `Database/Proyecto BD seguimiento egresado.sql`:
+
+- `usuario`
+- `administrador`
+- `facultad`
+- `carrera`
+- `egresado`
+- `empresa`
+- `historial_laboral`
+- `encuesta_seguimiento`
+- `seguimiento_egresado`
+- `oferta_laboral`
+- `postulacion`
+- `auditoria`
+- `notificacion`
+- `recuperacion_password`
+
+Vistas:
+
+- `vw_egresados_carrera_facultad`
+- `vw_empresa_ofertas`
+- `vw_postulaciones_completas`
+- `vw_historial_laboral_completo`
+- `vw_encuestas_egresados`
+- `vw_egresados_empleados`
+- `vw_ofertas_activas`
+- `vw_cantidad_ofertas_empresa`
+- `vw_postulaciones_por_oferta`
+- `vw_promedio_salarial_carrera`
+
+Funciones:
+
+- `fn_total_postulaciones`
+- `fn_total_ofertas_empresa`
+- `fn_promedio_salario`
+- `fn_nombre_completo`
+- `fn_nombre_carrera`
+- `fn_nombre_empresa`
+- `fn_total_egresados_carrera`
+- `fn_total_encuestas`
+- `fn_estado_laboral_actual`
+- `fn_ultima_empresa`
+
+Procedimientos:
+
+- `sp_registrar_empresa`
+- `sp_actualizar_empresa`
+- `sp_registrar_egresado`
+- `sp_actualizar_egresado`
+- `sp_eliminar_egresado`
+- `sp_publicar_oferta`
+- `sp_actualizar_oferta`
+- `sp_cerrar_oferta`
+- `sp_registrar_postulacion`
+- `sp_cambiar_estado_postulacion`
+- `sp_registrar_encuesta`
+- `sp_asociar_encuesta_egresado`
+- `sp_postulaciones_por_empresa`
+- `sp_egresados_por_carrera`
+- `sp_ofertas_por_facultad`
+
+## Modulos Existentes
+
+Frontend funcional:
+
+- Login por rol.
+- Dashboard administrador.
+- Gestion de egresados.
+- Gestion de empresas.
+- Gestion de ofertas laborales.
+- Gestion de encuestas.
+- Reportes y estadisticas.
+- Auditoria.
+- Configuracion.
+- Dashboard empresa.
+- Crear oferta.
+- Postulaciones recibidas.
+- Perfil empresa.
+- Dashboard egresado.
+- Bolsa laboral.
+- Mis postulaciones.
+- Encuesta de seguimiento.
+- Mi perfil.
+- Historial laboral.
+- Notificaciones.
+
+Backend implementado:
+
+- `health`: verificacion de API y DB.
+- `auth`: login, JWT, middleware de autorizacion y reconstruccion de sesion.
+- `admin-dashboard`: metricas y graficos de lectura para admin.
+- `egresados`: listado admin de egresados con usuario, carrera y facultad.
+- `empresas`: listado admin de empresas con correo/estado de usuario.
+- `ofertas`: listado admin de ofertas con razon social de empresa.
+- `encuestas`: listado admin de encuestas asociadas a egresados.
+- `auditoria`: lectura de tabla `auditoria`.
+- `notificaciones`: lectura de notificaciones del usuario autenticado.
+
+Backend pendiente:
+
+- Modulos REST para postulaciones, historial laboral y reportes especificos no cubiertos por dashboard.
+- Servicios de lectura/escritura usando vistas/procedimientos.
+- Filtros, paginacion y validaciones de entrada.
+- Manejo de permisos por entidad.
+
+## Convenciones de Codigo
+
+Frontend:
+
+- Mantener TypeScript estricto y tipos union para roles/pantallas.
+- Reutilizar `AuthRole` y `AuthSession` desde `src/app/auth.ts`.
+- Mantener proteccion de pantallas con `ROLE_SCREENS`.
+- No romper la estructura visual importada de Figma.
+- Los estilos actuales estan mayormente inline en `App.tsx`; no migrar a otro sistema sin fase aprobada.
+- Si se agregan llamadas API, concentrar helpers de autenticacion/API en archivos dedicados, no duplicar `fetch` con URLs hardcodeadas por toda la UI.
+- Mantener `VITE_API_URL` como base configurable.
+- En pantallas admin, mantener fallback local a mocks mientras no exista manejo visual de errores/carga.
+
+Backend:
+
+- TypeScript estricto.
+- ESM con imports que incluyen extension `.js` en codigo TS cuando importa archivos locales, por compatibilidad `NodeNext`.
+- Separar por modulo: `*.routes.ts`, `*.controller.ts`, `*.service.ts`, middleware si aplica.
+- Usar `asyncHandler` para controladores async.
+- Usar consultas parametrizadas con `pool.execute` o `pool.query`, nunca interpolar valores del usuario en SQL.
+- Errores de DB deben pasar por `errorHandler`.
+- Responder JSON uniforme con `ok`.
+- Usar `requireAuth` y `requireRole` en rutas protegidas.
+- La fase actual solo permite `SELECT`; no introducir `INSERT`, `UPDATE`, `DELETE` ni CRUD hasta aprobacion de fase posterior.
+
+Base de datos:
+
+- Tratar `Database/` como fuente de verdad y artefacto protegido.
+- No modificar scripts SQL existentes sin aprobacion explicita.
+- Preferir vistas y procedimientos existentes cuando calcen con la necesidad.
+- Respetar triggers de validacion y auditoria; no duplicar reglas contradictorias en backend.
+
+## Restricciones Permanentes
+
+- Antes de cualquier cambio, leer `AI_CONTEXT.md` y `PROJECT_STATUS.md`.
+- Despues de completar una fase, actualizar ambos documentos.
+- No modificar `Database/` salvo instruccion explicita del usuario.
+- No alterar el diseno Figma/base visual de la aplicacion salvo instruccion explicita.
+- No eliminar plugins obligatorios de `vite.config.ts`: React y Tailwind son requeridos por Make.
+- No agregar `.css`, `.tsx` ni `.ts` a `assetsInclude`.
+- No cambiar el modelo de password a bcrypt sin migracion aprobada de datos.
+- No hacer resets destructivos de git ni revertir cambios no propios.
+- No cambiar credenciales demo sin verificar que existan en la BD.
+- No asumir que los datos mock son persistentes; son representaciones alineadas al esquema hasta que existan endpoints.
+- Mantener compatibilidad con MySQL `utf8mb4` por nombres y textos con acentos.
+
+## Decisiones Tecnicas Tomadas
+
+- Backend separado dentro de `backend/`, no integrado al servidor Vite.
+- API bajo prefijo `/api`.
+- CORS restringido a `FRONTEND_ORIGIN`.
+- MySQL se accede mediante pool unico `mysql2/promise`.
+- Autenticacion inicial contra tabla `usuario`.
+- Passwords en texto plano por compatibilidad con la BD actual.
+- JWT incluye solo `id_usuario` y `role`.
+- Roles de aplicacion se resuelven por tablas hijas, no por campo directo en `usuario`.
+- El frontend guarda la sesion en `localStorage`.
+- Las rutas internas del frontend son estado local, no React Router.
+- Los datos de las pantallas siguen mock hasta que se implemente cada modulo REST.
+- Las pantallas de administrador ya consumen datos reales de MySQL para dashboard, egresados, empresas, ofertas, encuestas, auditoria y notificaciones.
+- Los listados grandes iniciales usan `LIMIT 500` en backend hasta implementar paginacion real.
+- Los errores SQL `SIGNAL` se traducen a HTTP 422 y duplicados a 409.
+
+## Protocolo Para Futuras Fases
+
+1. Leer `AI_CONTEXT.md`.
+2. Leer `PROJECT_STATUS.md`.
+3. Confirmar la fase pendiente o solicitada.
+4. Implementar cambios pequenos y coherentes con la arquitectura.
+5. Verificar con build/test disponible.
+6. Actualizar `AI_CONTEXT.md` si cambio la arquitectura, convenciones, endpoints o restricciones.
+7. Actualizar `PROJECT_STATUS.md` con fase, archivos modificados y proxima recomendacion.

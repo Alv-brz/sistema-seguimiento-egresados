@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend, LineChart, Line,
@@ -20,6 +20,16 @@ import {
   type AuthRole,
   type AuthSession,
 } from "./auth";
+import {
+  adminApi,
+  type AdminAuditoria,
+  type AdminDashboardData,
+  type AdminEgresado,
+  type AdminEmpresa,
+  type AdminEncuesta,
+  type AdminOferta,
+  type ApiNotificacion,
+} from "./api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Role = AuthRole;
@@ -196,6 +206,24 @@ const DATA_POST_EVOLUCION = [
   { mes: "Ene", postulaciones: 120 },
 ];
 
+const ADMIN_DASHBOARD_FALLBACK: AdminDashboardData = {
+  counts: {
+    totalEgresados: 688,
+    totalEmpresas: 46,
+    totalOfertas: 124,
+    ofertasActivas: 89,
+    totalPostulaciones: 1247,
+    totalEncuestas: 412,
+  },
+  charts: {
+    egresadosPorCarrera: DATA_CARRERA,
+    egresadosPorFacultad: DATA_FACULTAD,
+    estadoLaboral: DATA_LABORAL,
+    ofertasHistorial: DATA_OFERTAS_HIST,
+    postulacionesEvolucion: DATA_POST_EVOLUCION,
+  },
+};
+
 // ─── Utility Components ───────────────────────────────────────────────────────
 type BadgeVariant = "success" | "danger" | "warning" | "info" | "neutral";
 
@@ -341,6 +369,35 @@ function DR({ label, value, full }: { label: string; value: string | number | nu
   );
 }
 
+function useApiData<T>(enabled: boolean, loader: () => Promise<T>, fallback: T): T {
+  const [data, setData] = useState<T>(fallback);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!enabled) {
+      setData(fallback);
+      return () => {
+        active = false;
+      };
+    }
+
+    loader()
+      .then((nextData) => {
+        if (active) setData(nextData);
+      })
+      .catch(() => {
+        if (active) setData(fallback);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [enabled, loader, fallback]);
+
+  return data;
+}
+
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
   const [view, setView] = useState<"login" | "recuperar">("login");
@@ -471,6 +528,10 @@ function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
 
 // ─── ADMIN: Dashboard ─────────────────────────────────────────────────────────
 function AdminDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const dashboard = useApiData(true, adminApi.dashboard, ADMIN_DASHBOARD_FALLBACK);
+  const responseRate = dashboard.counts.totalEgresados > 0
+    ? Math.round((dashboard.counts.totalEncuestas / dashboard.counts.totalEgresados) * 100)
+    : 0;
   const quickLinks: { label: string; screen: Screen; icon: React.ReactNode; color: string }[] = [
     { label: "Gestión de Egresados", screen: "admin-egresados", icon: <GraduationCap size={20} />, color: "#2563EB" },
     { label: "Gestión de Empresas", screen: "admin-empresas", icon: <Building2 size={20} />, color: "#0EA5E9" },
@@ -482,17 +543,17 @@ function AdminDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
     <div>
       <PageHeader title="Dashboard" subtitle="Resumen general — Universidad de Huánuco (UDH)" />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 14, marginBottom: 24 }}>
-        <StatCard icon={<GraduationCap size={21} />} label="Total Egresados" value="688" sub="↑ 42 este semestre" color="#2563EB" />
-        <StatCard icon={<Building2 size={21} />} label="Total Empresas" value="46" sub="12 nuevas este año" color="#0EA5E9" />
-        <StatCard icon={<Briefcase size={21} />} label="Ofertas Laborales" value="124" sub="89 activas" color="#6366F1" />
-        <StatCard icon={<FileText size={21} />} label="Postulaciones" value="1,247" sub="↑ 18% este mes" color="#10B981" />
-        <StatCard icon={<ClipboardList size={21} />} label="Encuestas" value="412" sub="60% tasa de respuesta" color="#F59E0B" />
+        <StatCard icon={<GraduationCap size={21} />} label="Total Egresados" value={dashboard.counts.totalEgresados.toLocaleString()} sub="tabla egresado" color="#2563EB" />
+        <StatCard icon={<Building2 size={21} />} label="Total Empresas" value={dashboard.counts.totalEmpresas.toLocaleString()} sub="tabla empresa" color="#0EA5E9" />
+        <StatCard icon={<Briefcase size={21} />} label="Ofertas Laborales" value={dashboard.counts.totalOfertas.toLocaleString()} sub={`${dashboard.counts.ofertasActivas.toLocaleString()} activas`} color="#6366F1" />
+        <StatCard icon={<FileText size={21} />} label="Postulaciones" value={dashboard.counts.totalPostulaciones.toLocaleString()} sub="tabla postulacion" color="#10B981" />
+        <StatCard icon={<ClipboardList size={21} />} label="Encuestas" value={dashboard.counts.totalEncuestas.toLocaleString()} sub={`${responseRate}% tasa de respuesta`} color="#F59E0B" />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 18 }}>
         <Card style={{ padding: 24 }}>
           <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Egresados por Carrera (nombre_carrera)</div>
           <ResponsiveContainer width="100%" height={210}>
-            <BarChart data={DATA_CARRERA} layout="vertical" margin={{ left: 4, right: 12 }}>
+            <BarChart data={dashboard.charts.egresadosPorCarrera} layout="vertical" margin={{ left: 4, right: 12 }}>
               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
               <XAxis type="number" tick={{ fontSize: 11, fill: "#94A3B8" }} />
               <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "#64748B" }} width={100} />
@@ -505,8 +566,8 @@ function AdminDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
           <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Egresados por Facultad (nombre_facultad)</div>
           <ResponsiveContainer width="100%" height={210}>
             <PieChart>
-              <Pie data={DATA_FACULTAD} cx="50%" cy="50%" innerRadius={52} outerRadius={82} dataKey="value" paddingAngle={3}>
-                {DATA_FACULTAD.map((e, i) => <Cell key={i} fill={e.color} />)}
+              <Pie data={dashboard.charts.egresadosPorFacultad} cx="50%" cy="50%" innerRadius={52} outerRadius={82} dataKey="value" paddingAngle={3}>
+                {dashboard.charts.egresadosPorFacultad.map((e, i) => <Cell key={i} fill={e.color} />)}
               </Pie>
               <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12 }} />
               <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: 12 }} />
@@ -519,8 +580,8 @@ function AdminDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
           <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Estado Laboral — estado_laboral (%)</div>
           <ResponsiveContainer width="100%" height={210}>
             <PieChart>
-              <Pie data={DATA_LABORAL} cx="50%" cy="50%" outerRadius={82} dataKey="value" paddingAngle={3}>
-                {DATA_LABORAL.map((e, i) => <Cell key={i} fill={e.color} />)}
+              <Pie data={dashboard.charts.estadoLaboral} cx="50%" cy="50%" outerRadius={82} dataKey="value" paddingAngle={3}>
+                {dashboard.charts.estadoLaboral.map((e, i) => <Cell key={i} fill={e.color} />)}
               </Pie>
               <Tooltip formatter={(v: number) => `${v}%`} contentStyle={{ borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12 }} />
               <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: 12 }} />
@@ -530,7 +591,7 @@ function AdminDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
         <Card style={{ padding: 24 }}>
           <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Ofertas: estado_oferta Activa vs Cerrada</div>
           <ResponsiveContainer width="100%" height={210}>
-            <BarChart data={DATA_OFERTAS_HIST}>
+            <BarChart data={dashboard.charts.ofertasHistorial}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
               <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "#94A3B8" }} />
               <YAxis tick={{ fontSize: 11, fill: "#94A3B8" }} />
@@ -559,18 +620,20 @@ function AdminDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // ─── ADMIN: Egresados ─────────────────────────────────────────────────────────
 function AdminEgresados() {
+  const egresados = useApiData(true, adminApi.egresados, EGRESADOS as AdminEgresado[]);
   const [search, setSearch] = useState("");
   const [facultadFiltro, setFacultadFiltro] = useState("Todas");
   const [sexoFiltro, setSexoFiltro] = useState("Todos");
-  const [selected, setSelected] = useState<typeof EGRESADOS[0] | null>(null);
+  const [selected, setSelected] = useState<AdminEgresado | null>(null);
 
-  const filtered = EGRESADOS.filter(e => {
+  const filtered = egresados.filter(e => {
     const q = search.toLowerCase();
     const matchQ = `${e.nombre_egresado} ${e.apellidos_egresado} ${e.dni} ${e.nombre_carrera}`.toLowerCase().includes(q);
     const matchF = facultadFiltro === "Todas" || e.nombre_facultad === facultadFiltro;
     const matchS = sexoFiltro === "Todos" || e.sexo === sexoFiltro;
     return matchQ && matchF && matchS;
   });
+  const facultades = [...new Set(egresados.map(e => e.nombre_facultad))];
 
   return (
     <div>
@@ -600,13 +663,13 @@ function AdminEgresados() {
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Gestión de Egresados" subtitle={`${EGRESADOS.length} registros en tabla egresado`} action={<Btn><Plus size={14} /> Nuevo Egresado</Btn>} />
+      <PageHeader title="Gestión de Egresados" subtitle={`${egresados.length} registros en tabla egresado`} action={<Btn><Plus size={14} /> Nuevo Egresado</Btn>} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10, alignItems: "center" }}>
           <SearchBar value={search} onChange={setSearch} placeholder="Buscar por dni, nombre_egresado, apellidos_egresado..." />
           <select value={facultadFiltro} onChange={e => setFacultadFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
             <option>Todas</option>
-            {FACULTADES.map(f => <option key={f}>{f}</option>)}
+            {facultades.map(f => <option key={f}>{f}</option>)}
           </select>
           <select value={sexoFiltro} onChange={e => setSexoFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
             <option>Todos</option>
@@ -640,7 +703,7 @@ function AdminEgresados() {
             </tbody>
           </table>
         </div>
-        <Pagination total={EGRESADOS.length} showing={filtered.length} />
+        <Pagination total={egresados.length} showing={filtered.length} />
       </Card>
     </div>
   );
@@ -648,14 +711,15 @@ function AdminEgresados() {
 
 // ─── ADMIN: Empresas ──────────────────────────────────────────────────────────
 function AdminEmpresas() {
+  const empresas = useApiData(true, adminApi.empresas, EMPRESAS as AdminEmpresa[]);
   const [search, setSearch] = useState("");
   const [sectorFiltro, setSectorFiltro] = useState("Todos");
-  const [selected, setSelected] = useState<typeof EMPRESAS[0] | null>(null);
-  const filtered = EMPRESAS.filter(e => {
+  const [selected, setSelected] = useState<AdminEmpresa | null>(null);
+  const filtered = empresas.filter(e => {
     const q = search.toLowerCase();
     return `${e.razon_social} ${e.ruc} ${e.sector}`.toLowerCase().includes(q) && (sectorFiltro === "Todos" || e.sector === sectorFiltro);
   });
-  const sectores = [...new Set(EMPRESAS.map(e => e.sector))];
+  const sectores = [...new Set(empresas.map(e => e.sector))];
 
   return (
     <div>
@@ -677,7 +741,7 @@ function AdminEmpresas() {
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Gestión de Empresas" subtitle={`${EMPRESAS.length} registros en tabla empresa`} action={<Btn><Plus size={14} /> Nueva Empresa</Btn>} />
+      <PageHeader title="Gestión de Empresas" subtitle={`${empresas.length} registros en tabla empresa`} action={<Btn><Plus size={14} /> Nueva Empresa</Btn>} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
           <SearchBar value={search} onChange={setSearch} placeholder="Buscar por razon_social, ruc, sector..." />
@@ -709,18 +773,19 @@ function AdminEmpresas() {
             ))}
           </tbody>
         </table>
-        <Pagination total={EMPRESAS.length} showing={filtered.length} />
+        <Pagination total={empresas.length} showing={filtered.length} />
       </Card>
     </div>
   );
 }
 
 // ─── ADMIN: Ofertas ───────────────────────────────────────────────────────────
-function AdminOfertas() {
-  const [selected, setSelected] = useState<typeof OFERTAS[0] | null>(null);
+function AdminOfertas({ useApi = true }: { useApi?: boolean }) {
+  const ofertas = useApiData(useApi, adminApi.ofertas, OFERTAS as AdminOferta[]);
+  const [selected, setSelected] = useState<AdminOferta | null>(null);
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
   const [modalidadFiltro, setModalidadFiltro] = useState("Todos");
-  const filtered = OFERTAS.filter(o => (estadoFiltro === "Todos" || o.estado_oferta === estadoFiltro) && (modalidadFiltro === "Todos" || o.modalidad === modalidadFiltro));
+  const filtered = ofertas.filter(o => (estadoFiltro === "Todos" || o.estado_oferta === estadoFiltro) && (modalidadFiltro === "Todos" || o.modalidad === modalidadFiltro));
 
   return (
     <div>
@@ -734,7 +799,7 @@ function AdminOfertas() {
             <DR label="ubicacion" value={selected.ubicacion} />
             <DR label="modalidad" value={selected.modalidad} />
             <DR label="tipo_contrato" value={selected.tipo_contrato} />
-            <DR label="salario DECIMAL(10,2)" value={`S/. ${selected.salario.toLocaleString()}`} />
+            <DR label="salario DECIMAL(10,2)" value={selected.salario != null ? `S/. ${selected.salario.toLocaleString()}` : "—"} />
             <DR label="fecha_publicacion" value={selected.fecha_publicacion} />
             <DR label="fecha_cierre" value={selected.fecha_cierre} />
             <DR label="estado_oferta" value={selected.estado_oferta} />
@@ -744,7 +809,7 @@ function AdminOfertas() {
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Gestión de Ofertas Laborales" subtitle={`${OFERTAS.length} registros en tabla oferta_laboral`} action={<Btn><Plus size={14} /> Crear Oferta</Btn>} />
+      <PageHeader title="Gestión de Ofertas Laborales" subtitle={`${ofertas.length} registros en tabla oferta_laboral`} action={<Btn><Plus size={14} /> Crear Oferta</Btn>} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
           <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
@@ -765,7 +830,7 @@ function AdminOfertas() {
                   <TD>{o.puesto}</TD>
                   <TD>{o.area}</TD>
                   <TD><span style={{ padding: "3px 10px", background: "#F1F5F9", borderRadius: 6, fontSize: 12 }}>{o.modalidad}</span></TD>
-                  <TD><span style={{ fontWeight: 600, color: "#10B981" }}>S/. {o.salario.toLocaleString()}</span></TD>
+                  <TD><span style={{ fontWeight: 600, color: "#10B981" }}>{o.salario != null ? `S/. ${o.salario.toLocaleString()}` : "—"}</span></TD>
                   <TD>{o.fecha_publicacion}</TD>
                   <TD>{o.fecha_cierre}</TD>
                   <TD><StatusBadge label={o.estado_oferta} /></TD>
@@ -788,9 +853,10 @@ function AdminOfertas() {
 
 // ─── ADMIN: Encuestas ─────────────────────────────────────────────────────────
 function AdminEncuestas() {
-  const [selected, setSelected] = useState<typeof ENCUESTAS[0] | null>(null);
+  const encuestas = useApiData(true, adminApi.encuestas, ENCUESTAS as AdminEncuesta[]);
+  const [selected, setSelected] = useState<AdminEncuesta | null>(null);
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
-  const filtered = ENCUESTAS.filter(e => estadoFiltro === "Todos" || e.estado_laboral === estadoFiltro);
+  const filtered = encuestas.filter(e => estadoFiltro === "Todos" || e.estado_laboral === estadoFiltro);
 
   return (
     <div>
@@ -852,6 +918,7 @@ function AdminEncuestas() {
 
 // ─── ADMIN: Reportes ──────────────────────────────────────────────────────────
 function Reportes() {
+  const dashboard = useApiData(true, adminApi.dashboard, ADMIN_DASHBOARD_FALLBACK);
   const sel: React.CSSProperties = { padding: "8px 12px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit", background: "#fff" };
   return (
     <div>
@@ -869,17 +936,17 @@ function Reportes() {
         </div>
       </Card>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 14, marginBottom: 24 }}>
-        <StatCard icon={<GraduationCap size={21} />} label="Total Egresados" value="688" color="#2563EB" />
-        <StatCard icon={<Building2 size={21} />} label="Total Empresas" value="46" color="#0EA5E9" />
-        <StatCard icon={<Briefcase size={21} />} label="Total Ofertas" value="124" color="#6366F1" />
-        <StatCard icon={<FileText size={21} />} label="Total Postulaciones" value="1,247" color="#10B981" />
-        <StatCard icon={<ClipboardList size={21} />} label="Encuestas respondidas" value="412" color="#F59E0B" />
+        <StatCard icon={<GraduationCap size={21} />} label="Total Egresados" value={dashboard.counts.totalEgresados.toLocaleString()} color="#2563EB" />
+        <StatCard icon={<Building2 size={21} />} label="Total Empresas" value={dashboard.counts.totalEmpresas.toLocaleString()} color="#0EA5E9" />
+        <StatCard icon={<Briefcase size={21} />} label="Total Ofertas" value={dashboard.counts.totalOfertas.toLocaleString()} color="#6366F1" />
+        <StatCard icon={<FileText size={21} />} label="Total Postulaciones" value={dashboard.counts.totalPostulaciones.toLocaleString()} color="#10B981" />
+        <StatCard icon={<ClipboardList size={21} />} label="Encuestas respondidas" value={dashboard.counts.totalEncuestas.toLocaleString()} color="#F59E0B" />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 18 }}>
         <Card style={{ padding: 24 }}>
           <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Egresados por Carrera</div>
           <ResponsiveContainer width="100%" height={210}>
-            <BarChart data={DATA_CARRERA} layout="vertical" margin={{ left: 4, right: 12 }}>
+            <BarChart data={dashboard.charts.egresadosPorCarrera} layout="vertical" margin={{ left: 4, right: 12 }}>
               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
               <XAxis type="number" tick={{ fontSize: 11, fill: "#94A3B8" }} />
               <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "#64748B" }} width={100} />
@@ -892,8 +959,8 @@ function Reportes() {
           <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Egresados por Facultad</div>
           <ResponsiveContainer width="100%" height={210}>
             <PieChart>
-              <Pie data={DATA_FACULTAD} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={3}>
-                {DATA_FACULTAD.map((e, i) => <Cell key={i} fill={e.color} />)}
+              <Pie data={dashboard.charts.egresadosPorFacultad} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={3}>
+                {dashboard.charts.egresadosPorFacultad.map((e, i) => <Cell key={i} fill={e.color} />)}
               </Pie>
               <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12 }} />
               <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: 12 }} />
@@ -906,8 +973,8 @@ function Reportes() {
           <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Estado Laboral (%)</div>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
-              <Pie data={DATA_LABORAL} cx="50%" cy="50%" outerRadius={75} dataKey="value" paddingAngle={3}>
-                {DATA_LABORAL.map((e, i) => <Cell key={i} fill={e.color} />)}
+              <Pie data={dashboard.charts.estadoLaboral} cx="50%" cy="50%" outerRadius={75} dataKey="value" paddingAngle={3}>
+                {dashboard.charts.estadoLaboral.map((e, i) => <Cell key={i} fill={e.color} />)}
               </Pie>
               <Tooltip formatter={(v: number) => `${v}%`} contentStyle={{ borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12 }} />
               <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: 11 }} />
@@ -917,7 +984,7 @@ function Reportes() {
         <Card style={{ padding: 24 }}>
           <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Ofertas: Activa vs Cerrada</div>
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={DATA_OFERTAS_HIST}>
+            <BarChart data={dashboard.charts.ofertasHistorial}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
               <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "#94A3B8" }} />
               <YAxis tick={{ fontSize: 11, fill: "#94A3B8" }} />
@@ -931,7 +998,7 @@ function Reportes() {
         <Card style={{ padding: 24 }}>
           <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Evolución Postulaciones</div>
           <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={DATA_POST_EVOLUCION}>
+            <LineChart data={dashboard.charts.postulacionesEvolucion}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
               <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "#94A3B8" }} />
               <YAxis tick={{ fontSize: 11, fill: "#94A3B8" }} />
@@ -1005,14 +1072,15 @@ function Configuracion() {
 // ─── ADMIN: Auditoría ─────────────────────────────────────────────────────────
 // tabla: auditoria — id_auditoria, tabla_afectada, accion, id_registro, descripcion, fecha_evento, usuario_bd
 function Auditoria() {
+  const auditoria = useApiData(true, adminApi.auditoria, AUDITORIA_DATA as AdminAuditoria[]);
   const [search, setSearch] = useState("");
   const [tablaFiltro, setTablaFiltro] = useState("Todas");
   const [accionFiltro, setAccionFiltro] = useState("Todas");
-  const filtered = AUDITORIA_DATA.filter(a => {
+  const filtered = auditoria.filter(a => {
     const q = search.toLowerCase();
     return `${a.descripcion} ${a.usuario_bd} ${a.tabla_afectada}`.toLowerCase().includes(q) && (tablaFiltro === "Todas" || a.tabla_afectada === tablaFiltro) && (accionFiltro === "Todas" || a.accion === accionFiltro);
   });
-  const tablas = [...new Set(AUDITORIA_DATA.map(a => a.tabla_afectada))];
+  const tablas = [...new Set(auditoria.map(a => a.tabla_afectada))];
 
   return (
     <div>
@@ -1049,7 +1117,7 @@ function Auditoria() {
             </tbody>
           </table>
         </div>
-        <Pagination total={AUDITORIA_DATA.length} showing={filtered.length} />
+        <Pagination total={auditoria.length} showing={filtered.length} />
       </Card>
     </div>
   );
@@ -1711,8 +1779,14 @@ function EncuestaSeguimiento() {
 
 // ─── Notificaciones (todos los roles) ────────────────────────────────────────
 // tabla: notificacion — id_notificacion, id_usuario, titulo, mensaje, leido BOOLEAN, fecha_envio DATETIME
-function Notificaciones() {
-  const [notifs, setNotifs] = useState(NOTIFICACIONES_DATA);
+function Notificaciones({ useApi = false }: { useApi?: boolean }) {
+  const apiNotifs = useApiData(useApi, adminApi.notificaciones, NOTIFICACIONES_DATA as ApiNotificacion[]);
+  const [notifs, setNotifs] = useState<ApiNotificacion[]>(apiNotifs);
+
+  useEffect(() => {
+    setNotifs(apiNotifs);
+  }, [apiNotifs]);
+
   function markRead(id: number) {
     setNotifs(prev => prev.map(n => n.id_notificacion === id ? { ...n, leido: true } : n));
   }
@@ -1922,7 +1996,7 @@ export default function App() {
       case "admin-dashboard": return <AdminDashboard setScreen={setScreen} />;
       case "admin-egresados": return <AdminEgresados />;
       case "admin-empresas": return <AdminEmpresas />;
-      case "admin-ofertas": return <AdminOfertas />;
+      case "admin-ofertas": return <AdminOfertas useApi={role === "admin"} />;
       case "admin-encuestas": return <AdminEncuestas />;
       case "admin-reportes": return <Reportes />;
       case "admin-config": return <Configuracion />;
@@ -1937,7 +2011,7 @@ export default function App() {
       case "egr-encuesta": return <EncuestaSeguimiento />;
       case "egr-perfil": return <MiPerfil />;
       case "egr-historial": return <HistorialLaboral />;
-      case "notificaciones": return <Notificaciones />;
+      case "notificaciones": return <Notificaciones useApi={role === "admin"} />;
       default: return null;
     }
   }
