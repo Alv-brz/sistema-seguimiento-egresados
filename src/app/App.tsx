@@ -13,6 +13,7 @@ import {
 import {
   authenticateUser,
   clearSession,
+  getDemoCredentials,
   getDemoSession,
   readStoredSession,
   saveSession,
@@ -357,8 +358,8 @@ function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
     { role: "egresado", label: "Egresado", desc: "bartolomé.vicente85683 — Bolsa laboral", icon: <GraduationCap size={15} /> },
   ];
 
-  function handleSubmit() {
-    const result = authenticateUser(usuario, password);
+  async function handleSubmit() {
+    const result = await authenticateUser(usuario, password);
 
     if (result.ok) {
       setLoginError("");
@@ -371,13 +372,18 @@ function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
       invalid: "Credenciales inválidas.",
       inactive: "El usuario se encuentra inactivo.",
       "role-not-found": "El usuario no tiene un rol asignado.",
+      network: "No se pudo conectar con el servidor de autenticación.",
     };
 
     setLoginError(messages[result.reason]);
   }
 
-  function handleDemoLogin(role: Role) {
-    const session = getDemoSession(role);
+  async function handleDemoLogin(role: Role) {
+    const credentials = getDemoCredentials(role);
+    setUsuario(credentials.nombre_usuario);
+    setPassword(credentials.password);
+
+    const session = await getDemoSession(role);
 
     if (session) {
       setLoginError("");

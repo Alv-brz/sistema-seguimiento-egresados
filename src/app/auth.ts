@@ -4,75 +4,70 @@ export type AuthSession = {
   id_usuario: number;
   nombre_usuario: string;
   role: AuthRole;
+  token: string;
 };
 
-type UsuarioRecord = {
-  id_usuario: number;
+type DemoCredentials = {
   nombre_usuario: string;
   password: string;
-  estado_usuario: "Activo" | "Inactivo";
 };
+
+type AuthFailureReason = "empty" | "invalid" | "inactive" | "role-not-found" | "network";
 
 type AuthResult =
   | { ok: true; session: AuthSession }
-  | { ok: false; reason: "empty" | "invalid" | "inactive" | "role-not-found" };
+  | { ok: false; reason: AuthFailureReason };
 
 const SESSION_STORAGE_KEY = "seg_egresado_bolsa.session";
+const API_BASE_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:3001/api").replace(/\/$/, "");
 
-// Fuente: Database/Proyecto BD seguimiento egresado.sql.
-// El rol no existe como campo en usuario; se resuelve por pertenencia a
-// administrador, empresa o egresado usando el mismo id_usuario.
-const USUARIOS: UsuarioRecord[] = [
-  { id_usuario: 25201, nombre_usuario: "admin.general001", password: "Admin123*", estado_usuario: "Activo" },
-  { id_usuario: 25001, nombre_usuario: "finanzasugartes14768", password: "%0r1MFj6Qp", estado_usuario: "Activo" },
-  { id_usuario: 1, nombre_usuario: "bartolomé.vicente85683", password: "&19LW%iOD&", estado_usuario: "Activo" },
-];
+const DEMO_CREDENTIALS: Record<AuthRole, DemoCredentials> = {
+  admin: { nombre_usuario: "admin.general001", password: "Admin123*" },
+  empresa: { nombre_usuario: "finanzasugartes14768", password: "%0r1MFj6Qp" },
+  egresado: { nombre_usuario: "bartolomé.vicente85683", password: "&19LW%iOD&" },
+};
 
-const ADMINISTRADOR_IDS = new Set<number>([25201]);
-const EMPRESA_IDS = new Set<number>([25001]);
-const EGRESADO_IDS = new Set<number>([1]);
-
-function resolveRole(id_usuario: number): AuthRole | null {
-  if (ADMINISTRADOR_IDS.has(id_usuario)) return "admin";
-  if (EMPRESA_IDS.has(id_usuario)) return "empresa";
-  if (EGRESADO_IDS.has(id_usuario)) return "egresado";
-  return null;
-}
-
-export function authenticateUser(nombre_usuario: string, password: string): AuthResult {
+export async function authenticateUser(
+  nombre_usuario: string,
+  password: string
+): Promise<AuthResult> {
   const cleanUser = nombre_usuario.trim();
 
   if (!cleanUser || !password) {
     return { ok: false, reason: "empty" };
   }
 
-  const user = USUARIOS.find((u) => u.nombre_usuario === cleanUser && u.password === password);
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre_usuario: cleanUser, password }),
+    });
 
-  if (!user) {
+    const data = (await response.json()) as unknown;
+
+    if (response.ok && isAuthSuccess(data)) {
+      return { ok: true, session: data.session };
+    }
+
+    if (isAuthFailure(data)) {
+      return { ok: false, reason: data.reason };
+    }
+
     return { ok: false, reason: "invalid" };
+  } catch {
+    return { ok: false, reason: "network" };
   }
-
-  if (user.estado_usuario !== "Activo") {
-    return { ok: false, reason: "inactive" };
-  }
-
-  const role = resolveRole(user.id_usuario);
-
-  if (!role) {
-    return { ok: false, reason: "role-not-found" };
-  }
-
-  return { ok: true, session: { role, id_usuario: user.id_usuario, nombre_usuario: user.nombre_usuario } };
 }
 
-export function getDemoSession(role: AuthRole): AuthSession | null {
-  const user = USUARIOS.find((u) => resolveRole(u.id_usuario) === role);
+export function getDemoCredentials(role: AuthRole): DemoCredentials {
+  return DEMO_CREDENTIALS[role];
+}
 
-  if (!user || user.estado_usuario !== "Activo") {
-    return null;
-  }
-
-  return { role, id_usuario: user.id_usuario, nombre_usuario: user.nombre_usuario };
+export async function getDemoSession(role: AuthRole): Promise<AuthSession | null> {
+  const credentials = getDemoCredentials(role);
+  const result = await authenticateUser(credentials.nombre_usuario, credentials.password);
+  return result.ok ? result.session : null;
 }
 
 export function saveSession(session: AuthSession) {
@@ -87,18 +82,10 @@ export function readStoredSession(): AuthSession | null {
   }
 
   try {
-    const parsed = JSON.parse(raw) as Partial<AuthSession>;
+    const parsed = JSON.parse(raw) as unknown;
 
-    if (
-      typeof parsed.id_usuario === "number" &&
-      typeof parsed.nombre_usuario === "string" &&
-      (parsed.role === "admin" || parsed.role === "empresa" || parsed.role === "egresado")
-    ) {
-      return {
-        id_usuario: parsed.id_usuario,
-        nombre_usuario: parsed.nombre_usuario,
-        role: parsed.role,
-      };
+    if (isSession(parsed)) {
+      return parsed;
     }
   } catch {
     clearSession();
@@ -111,4 +98,46 @@ export function readStoredSession(): AuthSession | null {
 
 export function clearSession() {
   localStorage.removeItem(SESSION_STORAGE_KEY);
+}
+
+function isAuthSuccess(value: unknown): value is { ok: true; session: AuthSession } {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const result = value as { ok?: unknown; session?: unknown };
+  return result.ok === true && isSession(result.session);
+}
+
+function isAuthFailure(value: unknown): value is { ok: false; reason: AuthFailureReason } {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const result = value as { ok?: unknown; reason?: unknown };
+
+  return (
+    result.ok === false &&
+    (result.reason === "empty" ||
+      result.reason === "invalid" ||
+      result.reason === "inactive" ||
+      result.reason === "role-not-found" ||
+      result.reason === "network")
+  );
+}
+
+function isSession(value: unknown): value is AuthSession {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const session = value as Partial<AuthSession>;
+
+  return (
+    typeof session.id_usuario === "number" &&
+    typeof session.nombre_usuario === "string" &&
+    typeof session.token === "string" &&
+    session.token.length > 0 &&
+    (session.role === "admin" || session.role === "empresa" || session.role === "egresado")
+  );
 }
