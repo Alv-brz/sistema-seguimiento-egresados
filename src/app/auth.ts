@@ -1,5 +1,11 @@
 export type AuthRole = "admin" | "empresa" | "egresado";
 
+export type AuthSession = {
+  id_usuario: number;
+  nombre_usuario: string;
+  role: AuthRole;
+};
+
 type UsuarioRecord = {
   id_usuario: number;
   nombre_usuario: string;
@@ -8,8 +14,10 @@ type UsuarioRecord = {
 };
 
 type AuthResult =
-  | { ok: true; role: AuthRole; id_usuario: number; nombre_usuario: string }
+  | { ok: true; session: AuthSession }
   | { ok: false; reason: "empty" | "invalid" | "inactive" | "role-not-found" };
+
+const SESSION_STORAGE_KEY = "seg_egresado_bolsa.session";
 
 // Fuente: Database/Proyecto BD seguimiento egresado.sql.
 // El rol no existe como campo en usuario; se resuelve por pertenencia a
@@ -54,5 +62,53 @@ export function authenticateUser(nombre_usuario: string, password: string): Auth
     return { ok: false, reason: "role-not-found" };
   }
 
-  return { ok: true, role, id_usuario: user.id_usuario, nombre_usuario: user.nombre_usuario };
+  return { ok: true, session: { role, id_usuario: user.id_usuario, nombre_usuario: user.nombre_usuario } };
+}
+
+export function getDemoSession(role: AuthRole): AuthSession | null {
+  const user = USUARIOS.find((u) => resolveRole(u.id_usuario) === role);
+
+  if (!user || user.estado_usuario !== "Activo") {
+    return null;
+  }
+
+  return { role, id_usuario: user.id_usuario, nombre_usuario: user.nombre_usuario };
+}
+
+export function saveSession(session: AuthSession) {
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+}
+
+export function readStoredSession(): AuthSession | null {
+  const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<AuthSession>;
+
+    if (
+      typeof parsed.id_usuario === "number" &&
+      typeof parsed.nombre_usuario === "string" &&
+      (parsed.role === "admin" || parsed.role === "empresa" || parsed.role === "egresado")
+    ) {
+      return {
+        id_usuario: parsed.id_usuario,
+        nombre_usuario: parsed.nombre_usuario,
+        role: parsed.role,
+      };
+    }
+  } catch {
+    clearSession();
+    return null;
+  }
+
+  clearSession();
+  return null;
+}
+
+export function clearSession() {
+  localStorage.removeItem(SESSION_STORAGE_KEY);
 }

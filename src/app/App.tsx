@@ -10,7 +10,15 @@ import {
   CheckCircle, AlertCircle, Clock, Download, Upload, Info, X,
   ShieldCheck, RefreshCw,
 } from "lucide-react";
-import { authenticateUser, type AuthRole } from "./auth";
+import {
+  authenticateUser,
+  clearSession,
+  getDemoSession,
+  readStoredSession,
+  saveSession,
+  type AuthRole,
+  type AuthSession,
+} from "./auth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Role = AuthRole;
@@ -23,6 +31,26 @@ type Screen =
   | "egr-dashboard" | "egr-bolsa" | "egr-postulaciones" | "egr-encuesta"
   | "egr-perfil" | "egr-historial"
   | "notificaciones";
+
+const HOME_BY_ROLE: Record<Role, Screen> = { admin: "admin-dashboard", empresa: "emp-dashboard", egresado: "egr-dashboard" };
+
+const ROLE_SCREENS: Record<Role, Set<Screen>> = {
+  admin: new Set([
+    "admin-dashboard", "admin-egresados", "admin-empresas", "admin-ofertas",
+    "admin-encuestas", "admin-reportes", "admin-config", "admin-auditoria", "notificaciones",
+  ]),
+  empresa: new Set([
+    "emp-dashboard", "emp-crear-oferta", "emp-postulaciones", "emp-perfil", "admin-ofertas", "notificaciones",
+  ]),
+  egresado: new Set([
+    "egr-dashboard", "egr-bolsa", "egr-postulaciones", "egr-encuesta",
+    "egr-perfil", "egr-historial", "notificaciones",
+  ]),
+};
+
+function canAccessScreen(role: Role, screen: Screen) {
+  return ROLE_SCREENS[role].has(screen);
+}
 
 // ─── Mock Data (aligned with BD seg_egresado_bolsa) ──────────────────────────
 
@@ -313,7 +341,7 @@ function DR({ label, value, full }: { label: string; value: string | number | nu
 }
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
-function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
+function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
   const [view, setView] = useState<"login" | "recuperar">("login");
   const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
@@ -334,7 +362,7 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
 
     if (result.ok) {
       setLoginError("");
-      onLogin(result.role);
+      onLogin(result.session);
       return;
     }
 
@@ -346,6 +374,18 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
     };
 
     setLoginError(messages[result.reason]);
+  }
+
+  function handleDemoLogin(role: Role) {
+    const session = getDemoSession(role);
+
+    if (session) {
+      setLoginError("");
+      onLogin(session);
+      return;
+    }
+
+    setLoginError("No se encontró una sesión demo válida.");
   }
 
   return (
@@ -363,7 +403,7 @@ function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
         <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.35)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>Acceso de Demostración por Rol</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {DEMOS.map(({ role, label, desc, icon }) => (
-            <button key={role} onClick={() => onLogin(role)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderRadius: 10, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", color: "#fff", textAlign: "left" }}>
+            <button key={role} onClick={() => handleDemoLogin(role)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderRadius: 10, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", color: "#fff", textAlign: "left" }}>
               <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(255,255,255,0.12)", display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</div>
               <div><div style={{ fontWeight: 600, fontSize: 13 }}>Entrar como {label}</div><div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{desc}</div></div>
             </button>
@@ -1842,15 +1882,31 @@ function TopNav({ role, screen, setScreen }: { role: Role; screen: Screen; setSc
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [role, setRole] = useState<Role>("admin");
-  const [screen, setScreen] = useState<Screen>("admin-dashboard");
+  const [session, setSession] = useState<AuthSession | null>(() => readStoredSession());
+  const [screen, setScreenState] = useState<Screen>(() => {
+    const storedSession = readStoredSession();
+    return storedSession ? HOME_BY_ROLE[storedSession.role] : "admin-dashboard";
+  });
 
-  function handleLogin(r: Role) {
-    setRole(r);
-    const home: Record<Role, Screen> = { admin: "admin-dashboard", empresa: "emp-dashboard", egresado: "egr-dashboard" };
-    setScreen(home[r]);
-    setLoggedIn(true);
+  const loggedIn = session != null;
+  const role: Role = session?.role ?? "admin";
+
+  function setScreen(nextScreen: Screen) {
+    if (!session) return;
+
+    setScreenState(canAccessScreen(session.role, nextScreen) ? nextScreen : HOME_BY_ROLE[session.role]);
+  }
+
+  function handleLogin(nextSession: AuthSession) {
+    saveSession(nextSession);
+    setSession(nextSession);
+    setScreenState(HOME_BY_ROLE[nextSession.role]);
+  }
+
+  function handleLogout() {
+    clearSession();
+    setSession(null);
+    setScreenState("admin-dashboard");
   }
 
   if (!loggedIn) return <LoginScreen onLogin={handleLogin} />;
@@ -1882,7 +1938,7 @@ export default function App() {
 
   return (
     <div style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
-      <Sidebar role={role} screen={screen} setScreen={setScreen} onLogout={() => setLoggedIn(false)} />
+      <Sidebar role={role} screen={screen} setScreen={setScreen} onLogout={handleLogout} />
       <TopNav role={role} screen={screen} setScreen={setScreen} />
       <main style={{ marginLeft: 240, paddingTop: 62, minHeight: "100vh", background: "#F1F5F9" }}>
         <div style={{ padding: 26 }}>{renderScreen()}</div>
