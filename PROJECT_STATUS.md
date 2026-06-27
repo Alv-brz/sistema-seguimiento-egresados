@@ -21,7 +21,11 @@ Estado aprobado al 2026-06-26:
 - Paginacion y filtros reales agregados a listados de administrador.
 - Pantallas de empresa conectadas a endpoints reales de lectura MySQL filtrados por JWT.
 - Pantallas de egresado conectadas a endpoints reales de lectura MySQL filtrados por JWT.
-- CRUD Empresa implementado para ofertas, postulaciones recibidas y perfil propio.
+- CRUD Empresa cerrado para ofertas, postulaciones recibidas y perfil propio, incluyendo crear, editar, cerrar/reactivar, eliminar condicionado y notificaciones reales.
+- Sistema global de mensajes y confirmaciones implementado en toda la aplicacion; ya no se usan `alert()`, `confirm()` ni `prompt()` nativos.
+- CRUD Egresado cerrado para postular a ofertas, editar perfil propio, CRUD de historial laboral, registrar encuesta y marcar notificaciones como leidas.
+- Restauracion de ultima pantalla valida por rol al refrescar la pagina con sesion activa.
+- CRUD Administrador Fase A implementado para configuracion del sistema, egresados, empresas, ofertas y eliminacion controlada de encuestas.
 
 ## Fases Implementadas
 
@@ -233,19 +237,26 @@ Archivos modificados:
 
 ### Fase 7 - CRUD Empresa
 
-Estado: implementada en esta sesion.
+Estado: cerrada y aprobada; CRUD Egresado ya fue implementado en una fase posterior.
 
 Incluye:
 
 - Publicacion real de ofertas desde Crear Oferta usando `id_empresa` derivado del JWT.
 - Edicion real de ofertas propias de la empresa autenticada.
 - Cierre real de ofertas propias cambiando `estado_oferta` a `Cerrada`.
+- Reactivacion real de ofertas propias cambiando `estado_oferta` a `Activa`.
+- Eliminacion real de ofertas propias solo cuando no existen postulaciones asociadas.
+- Bloqueo de eliminacion con mensaje exacto cuando existen postulaciones: `No se puede eliminar una oferta con postulaciones asociadas. Puede cerrarla.`
+- Formulario/modal completo para editar ofertas, sin `prompt()`, cargando todos los datos existentes.
+- Correccion del error `Cannot read properties of null (reading 'reset')` al crear oferta.
 - Cambio real de estado de postulaciones propias a `Pendiente`, `Aceptado` o `Rechazado`.
 - Actualizacion real del perfil de empresa y correo de usuario.
 - Validaciones frontend/backend para salario, fechas, estado de oferta, correo y `pagina_web`.
 - Propiedad obligatoria por `id_usuario` del JWT; una empresa no puede modificar ofertas ni postulaciones de otra empresa.
 - Errores claros en frontend para validaciones y rechazos del backend.
-- Refresco de listados despues de crear, editar, cerrar y cambiar estado.
+- Refresco de listados despues de crear, editar, cerrar, reactivar, eliminar y cambiar estado.
+- Badge real de notificaciones no leidas para administrador, empresa y egresado; se oculta si el contador es 0.
+- `Marcar todas como leidas` quedo pendiente en esta fase y fue implementado posteriormente en Fase 9.
 - No se modifico `Database/`.
 
 Endpoints backend agregados:
@@ -253,18 +264,207 @@ Endpoints backend agregados:
 - `POST /api/empresa/ofertas`
 - `PUT /api/empresa/ofertas/:id`
 - `PATCH /api/empresa/ofertas/:id/cerrar`
+- `PATCH /api/empresa/ofertas/:id/estado`
+- `DELETE /api/empresa/ofertas/:id`
 - `PATCH /api/empresa/postulaciones/:id/estado`
 - `PUT /api/empresa/perfil`
+- `GET /api/notificaciones/unread-count`
 
 Archivos modificados:
 
 - `backend/src/modules/empresa/empresa.routes.ts`
 - `backend/src/modules/empresa/empresa.controller.ts`
 - `backend/src/modules/empresa/empresa.service.ts`
+- `backend/src/modules/notificaciones/notificaciones.routes.ts`
+- `backend/src/modules/notificaciones/notificaciones.controller.ts`
+- `backend/src/modules/notificaciones/notificaciones.service.ts`
 - `src/app/api.ts`
 - `src/app/App.tsx`
 - `AI_CONTEXT.md`
 - `PROJECT_STATUS.md`
+
+Verificacion realizada:
+
+- `npm.cmd run build` en `backend/`: correcto.
+- `npm.cmd run build` en frontend: correcto tras ejecutar fuera del sandbox por restriccion de acceso en la ruta de OneDrive; Vite solo reporto advertencia de chunk grande.
+- Prueba HTTP real con API y MySQL: crear oferta, editar oferta, cerrar oferta, reactivar oferta, eliminar oferta sin postulaciones, intentar eliminar una oferta con postulaciones, contador de notificaciones y auditoria.
+
+### Fase 8 - Sistema Global de Mensajes y Confirmaciones
+
+Estado: implementada y aprobada por el usuario.
+
+Incluye:
+
+- `FeedbackProvider` global en `src/app/App.tsx` para todos los roles y pantallas.
+- Toasts reutilizables de exito, error, advertencia e informacion.
+- Reutilizacion de `sonner` instalado para la capa de toasts, con contenido personalizado al estilo visual actual.
+- Modal propio de confirmacion con botones `Cancelar` y `Confirmar`.
+- Eliminacion completa del uso de `alert()`, `confirm()` y `prompt()` nativos en `src/` y backend.
+- `unavailableCrudAction()` ahora muestra toast informativo.
+- Crear, editar, cerrar, reactivar y eliminar ofertas usan toasts y confirmaciones propias.
+- Postulaciones, perfil, login, logout, notificaciones y errores de validacion usan el sistema global.
+- No se modifico `Database/`.
+
+Archivos modificados:
+
+- `src/app/App.tsx`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+Verificacion realizada:
+
+- `rg` confirmo que no existen `alert()`, `confirm()` ni `prompt()` en `src/` ni backend.
+- `npm.cmd run build` en `backend/`: correcto.
+- `npm.cmd run build` en frontend: correcto tras ejecutar fuera del sandbox por restriccion de acceso en la ruta de OneDrive; Vite solo reporto advertencia de chunk grande.
+- Prueba HTTP real con API y MySQL: login, crear oferta, editar oferta, cerrar oferta, reactivar oferta, eliminar oferta sin postulaciones, bloqueo por postulaciones, actualizar perfil, contador de notificaciones y error de validacion.
+
+### Fase 9 - CRUD Egresado
+
+Estado: cerrada en esta sesion, pendiente de aprobacion del usuario antes de iniciar CRUD Administrador.
+
+Incluye:
+
+- Postulacion real desde Bolsa Laboral usando `id_usuario` del JWT como `id_egresado`.
+- Validacion de oferta activa, fecha de cierre vigente y postulacion duplicada.
+- Mis Postulaciones muestra solo postulaciones del egresado autenticado; acciones no permitidas siguen informando mediante toast.
+- Actualizacion real del perfil de egresado en tablas `usuario` y `egresado`.
+- Catalogo real de carreras para el formulario de perfil.
+- Validaciones de DNI de 8 digitos, sexo `M/F`, fecha de egreso no futura, correo valido y carrera existente.
+- CRUD real de historial laboral propio: crear, editar y eliminar.
+- Validaciones de historial para salario no negativo y `fecha_fin >= fecha_inicio`.
+- Registro real de encuesta de seguimiento y asociacion con `seguimiento_egresado`.
+- Validacion de sueldo no negativo y disponibilidad de encuesta segun `configuracion_sistema.tiempo_entre_encuestas_meses`.
+- Notificaciones reales para egresado: marcar una como leida, marcar todas como leidas y refrescar contador/badge.
+- Todas las escrituras de egresado filtran por `res.locals.auth.id_usuario`; no se acepta `id_egresado` desde el frontend.
+- No se modifico `Database/`.
+- No se modifico el diseno visual aprobado ni estilos globales.
+
+Endpoints backend agregados:
+
+- `GET /api/egresado/carreras`
+- `POST /api/egresado/postulaciones`
+- `PUT /api/egresado/perfil`
+- `POST /api/egresado/historial`
+- `PUT /api/egresado/historial/:id`
+- `DELETE /api/egresado/historial/:id`
+- `POST /api/egresado/encuesta`
+- `PATCH /api/notificaciones/:id/leida`
+- `PATCH /api/notificaciones/leer-todas`
+
+Archivos modificados:
+
+- `backend/src/modules/egresado/egresado.routes.ts`
+- `backend/src/modules/egresado/egresado.controller.ts`
+- `backend/src/modules/egresado/egresado.service.ts`
+- `backend/src/modules/notificaciones/notificaciones.routes.ts`
+- `backend/src/modules/notificaciones/notificaciones.controller.ts`
+- `backend/src/modules/notificaciones/notificaciones.service.ts`
+- `src/app/api.ts`
+- `src/app/App.tsx`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+Verificacion realizada:
+
+- `npm.cmd run build` en `backend/`: correcto.
+- `npm.cmd run build` en frontend: correcto tras ejecutar fuera del sandbox por restriccion de acceso en la ruta de OneDrive; Vite solo reporto advertencia de chunk grande.
+- `rg` confirmo que no existen `alert()`, `confirm()` ni `prompt()` en `src/` ni backend.
+- Prueba HTTP real con API y MySQL: login con egresado real.
+- Prueba HTTP real: postular a oferta activa y vigente creada para prueba.
+- Prueba HTTP real: intento de postular dos veces devuelve 409 con mensaje claro.
+- Prueba HTTP real: intento de postular a oferta cerrada devuelve 422.
+- Prueba HTTP real: intento de postular a oferta activa vencida devuelve 422.
+- Prueba HTTP real: editar perfil y restaurar datos originales.
+- Prueba HTTP real: crear, editar y eliminar historial laboral propio.
+- Prueba HTTP real: otro egresado no puede editar historial ajeno y recibe 404.
+- Prueba HTTP real: enviar encuesta disponible y bloquear envio duplicado por disponibilidad.
+- Prueba HTTP real: marcar una notificacion como leida, marcar todas como leidas y verificar contador en cero.
+- Auditoria verificada para las operaciones cubiertas por triggers existentes: `postulacion`, `oferta_laboral` y `egresado`.
+
+### Fase 10 - Restauracion de Pantalla al Refrescar
+
+Estado: implementada en esta sesion, pendiente de aprobacion del usuario antes de continuar con CRUD Administrador.
+
+Incluye:
+
+- Persistencia de la ultima pantalla valida por rol en `localStorage`.
+- Restauracion de pantalla al refrescar la pagina con una sesion activa guardada.
+- Validacion de la pantalla guardada contra `ROLE_SCREENS` del rol autenticado.
+- Retorno automatico al dashboard del rol si la pantalla guardada no es valida.
+- Mantenimiento de la SPA sin React Router y sin cambios visuales ni de estilos.
+- No se modifico `Database/`.
+
+Archivos modificados:
+
+- `src/app/App.tsx`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+Verificacion realizada:
+
+- `npm.cmd run build` en `backend/`: correcto.
+- `npm.cmd run build` en frontend: correcto tras ejecutar fuera del sandbox por restriccion de acceso en la ruta de OneDrive; Vite solo reporto advertencia de chunk grande.
+
+### Fase 11 - CRUD Administrador Fase A
+
+Estado: implementada en esta sesion, pendiente de aprobacion del usuario antes de iniciar CRUD Administrador Fase B.
+
+Incluye:
+
+- Confirmacion real en MySQL de tabla `configuracion_sistema`.
+- Backend `admin-configuracion` protegido con `requireAuth` y `requireRole("admin")`.
+- Pantalla Configuracion conectada a `configuracion_sistema` para lectura y actualizacion.
+- `tiempo_entre_encuestas_meses` reemplaza completamente el valor fijo de 6 meses en la logica del egresado.
+- Valor `0` en `tiempo_entre_encuestas_meses` permite responder encuesta inmediatamente.
+- CRUD administrador real de egresados: crear, editar y eliminar si la integridad referencial lo permite.
+- CRUD administrador real de empresas: crear, editar y eliminar si la integridad referencial lo permite.
+- Gestion administrador de ofertas: editar cualquier oferta, activar/cerrar y eliminar si la integridad referencial lo permite.
+- Gestion administrador de encuestas: detalle/listado existente y eliminacion controlada por integridad referencial.
+- Errores `SIGNAL`, duplicados e integridad referencial se muestran mediante toasts del sistema.
+- No se modificaron scripts existentes de `Database/` durante la implementacion de backend/frontend.
+
+Archivos creados:
+
+- `backend/src/modules/admin-configuracion/admin-configuracion.routes.ts`
+- `backend/src/modules/admin-configuracion/admin-configuracion.controller.ts`
+- `backend/src/modules/admin-configuracion/admin-configuracion.service.ts`
+
+Archivos modificados:
+
+- `backend/src/app.ts`
+- `backend/src/middleware/errorHandler.ts`
+- `backend/src/modules/egresado/egresado.service.ts`
+- `backend/src/modules/egresados/egresados.routes.ts`
+- `backend/src/modules/egresados/egresados.controller.ts`
+- `backend/src/modules/egresados/egresados.service.ts`
+- `backend/src/modules/empresas/empresas.routes.ts`
+- `backend/src/modules/empresas/empresas.controller.ts`
+- `backend/src/modules/empresas/empresas.service.ts`
+- `backend/src/modules/ofertas/ofertas.routes.ts`
+- `backend/src/modules/ofertas/ofertas.controller.ts`
+- `backend/src/modules/ofertas/ofertas.service.ts`
+- `backend/src/modules/encuestas/encuestas.routes.ts`
+- `backend/src/modules/encuestas/encuestas.controller.ts`
+- `backend/src/modules/encuestas/encuestas.service.ts`
+- `src/app/api.ts`
+- `src/app/App.tsx`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+Verificacion realizada:
+
+- `npm.cmd run build` en `backend/`: correcto.
+- `npm.cmd run build` en frontend: correcto tras ejecutar fuera del sandbox por restriccion de acceso en la ruta de OneDrive; Vite solo reporto advertencia de chunk grande.
+- Prueba HTTP real: health y login admin/empresa/egresado activo real.
+- Prueba HTTP real: configuracion lee/actualiza/restaura `tiempo_entre_encuestas_meses`.
+- Prueba HTTP real: con `tiempo_entre_encuestas_meses = 0`, endpoint de encuesta de egresado devuelve disponibilidad inmediata.
+- Prueba HTTP real: empresa no puede acceder a endpoints de configuracion admin y recibe 403.
+- Prueba HTTP real: crear, editar y eliminar egresado de prueba.
+- Prueba HTTP real: crear, editar y eliminar empresa de prueba.
+- Prueba HTTP real: editar oferta existente, cambiar estado y restaurar estado/datos originales.
+- Prueba HTTP real: intentar eliminar encuesta asociada devuelve 409 por integridad referencial.
+- Prueba HTTP real: auditoria registra cambios de `configuracion_sistema`.
+- `rg` confirmo que no quedan referencias fijas a `INTERVAL 6`, `6 MONTH`, `cada 6` ni `defaultValue={6}` en `backend/` o `src/`.
 
 ## Funcionalidades Terminadas
 
@@ -305,22 +505,33 @@ Archivos modificados:
 - Encuesta de seguimiento con ultima encuesta real.
 - Notificaciones reales para egresado.
 - Publicacion real de ofertas por empresa.
-- Edicion y cierre real de ofertas propias por empresa.
+- Edicion, cierre, reactivacion y eliminacion condicionada de ofertas propias por empresa.
 - Cambio real de estado de postulaciones propias por empresa.
 - Actualizacion real de perfil empresa.
+- Badge real de notificaciones no leidas para todos los roles.
+- Sistema global de toasts y confirmaciones para administrador, empresa y egresado.
+- Eliminacion de ventanas nativas `alert()`, `confirm()` y `prompt()` en la aplicacion.
+- Postulacion real de egresados a ofertas activas y vigentes.
+- Actualizacion real de perfil egresado.
+- CRUD real de historial laboral propio del egresado.
+- Registro real de encuesta de seguimiento del egresado.
+- Marcar una o todas las notificaciones como leidas para el usuario autenticado.
+- Restaurar la ultima pantalla valida del rol al refrescar la pagina con sesion activa.
+- Configuracion real del sistema desde `configuracion_sistema`.
+- CRUD Administrador Fase A para egresados, empresas, ofertas y eliminacion controlada de encuestas.
 
 ## Funcionalidades Pendientes
 
 - Consumir `GET /api/auth/me` al iniciar para validar sesion contra backend.
 - Endpoints backend para reportes.
 - Validacion de entrada por modulo.
-- Proteccion de permisos por propietario del recurso para modulos pendientes fuera de Empresa.
+- Proteccion de permisos por propietario del recurso para modulos pendientes fuera de Empresa y Egresado.
 - Manejo formal de variables `.env` y documentacion de ejemplo si falta.
 - Pruebas automatizadas o checks de integracion.
 
 ## Fases Pendientes Recomendadas
 
-### Fase 8 - Validacion de Sesion
+### Fase 12 - Validacion de Sesion
 
 Objetivo:
 
@@ -334,17 +545,15 @@ Archivos probables:
 - `src/app/api.ts`
 - `src/app/App.tsx`
 
-### Fase 9 - Escrituras Controladas Egresado/Admin
+### Fase 13 - CRUD Administrador Fase B
 
 Objetivo:
 
-- Registrar postulaciones.
-- Registrar encuestas y asociarlas a egresado.
-- Completar escrituras pendientes de administrador si se aprueban.
+- Completar escrituras pendientes de administrador no cubiertas por Fase A si se aprueban.
 - Usar procedimientos almacenados existentes si calzan.
 - Respetar triggers y errores `SIGNAL`.
 
-### Fase 10 - Modularizacion Frontend
+### Fase 14 - Modularizacion Frontend
 
 Objetivo:
 
@@ -364,10 +573,16 @@ Estado:
 - Frontend empresa consume endpoints reales de lectura.
 - Frontend egresado consume endpoints reales de lectura.
 - Frontend empresa ejecuta escrituras reales aprobadas para ofertas, postulaciones y perfil.
+- Frontend egresado ejecuta escrituras reales aprobadas para postulaciones, perfil, historial, encuesta y notificaciones.
+- CRUD Empresa queda cerrado funcionalmente.
+- CRUD Egresado queda cerrado funcionalmente y espera aprobacion del usuario antes de iniciar CRUD Administrador.
+- CRUD Administrador Fase A queda implementado y espera aprobacion del usuario antes de iniciar Fase B.
+- Refresco de pagina restaura la ultima pantalla valida del rol autenticado.
+- Sistema global de mensajes y confirmaciones activo en toda la aplicacion; no quedan ventanas nativas del navegador.
 - Listados admin tienen paginacion/filtros reales.
-- Acciones de escritura/exportacion no implementadas fuera de Empresa muestran aviso de fase CRUD.
+- Acciones de escritura/exportacion no implementadas fuera de Empresa, Egresado y Administrador Fase A muestran aviso de fase CRUD.
 - Base de datos intacta.
-- Proxima fase recomendada: Fase 8, validacion de sesion.
+- Proxima fase recomendada: esperar aprobacion; luego validacion de sesion o CRUD Administrador Fase B si el usuario lo autoriza.
 
 ## Archivos Importantes por Area
 
@@ -395,9 +610,9 @@ Backend:
 - `backend/src/modules/ofertas/*`: lectura admin de ofertas.
 - `backend/src/modules/encuestas/*`: lectura admin de encuestas.
 - `backend/src/modules/auditoria/*`: lectura de auditoria.
-- `backend/src/modules/notificaciones/*`: lectura de notificaciones.
+- `backend/src/modules/notificaciones/*`: lectura, contador y marcado de notificaciones del usuario autenticado.
 - `backend/src/modules/empresa/*`: lectura y CRUD aprobado por JWT para dashboard, ofertas, postulaciones y perfil empresa.
-- `backend/src/modules/egresado/*`: lectura por JWT para dashboard, bolsa laboral, postulaciones, perfil, historial y encuesta egresado.
+- `backend/src/modules/egresado/*`: lectura y CRUD aprobado por JWT para dashboard, bolsa laboral, postulaciones, perfil, historial y encuesta egresado.
 
 Base de datos:
 
@@ -407,6 +622,7 @@ Base de datos:
 - `Database/Procedimientos Almacenados.sql`: operaciones y reportes.
 - `Database/Triggers.sql`: auditoria.
 - `Database/Triggers Signal.sql`: validaciones.
+- `Database/ConfiguracionSistema.sql`: tabla `configuracion_sistema`, insert inicial y triggers aprobados.
 
 ## Reglas de Actualizacion
 

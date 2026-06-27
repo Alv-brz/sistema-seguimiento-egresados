@@ -32,3 +32,30 @@ export async function listNotificaciones(
     pageSize: pagination.pageSize,
   };
 }
+
+export async function countUnreadNotificaciones(id_usuario: number): Promise<number> {
+  const [rows] = await pool.execute(
+    "SELECT COUNT(*) AS total FROM notificacion WHERE id_usuario = ? AND leido = FALSE",
+    [id_usuario]
+  );
+
+  return Number((rows as { total: number }[])[0]?.total ?? 0);
+}
+
+export async function markNotificacionLeida(id_usuario: number, id_notificacion: number) {
+  const [result] = await pool.execute(
+    "UPDATE notificacion SET leido = TRUE WHERE id_notificacion = ? AND id_usuario = ?",
+    [id_notificacion, id_usuario]
+  );
+
+  return result;
+}
+
+export async function markAllNotificacionesLeidas(id_usuario: number) {
+  const [result] = await pool.execute(
+    "UPDATE notificacion SET leido = TRUE WHERE id_usuario = ? AND leido = FALSE",
+    [id_usuario]
+  );
+
+  return result;
+}

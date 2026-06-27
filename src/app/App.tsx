@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend, LineChart, Line,
 } from "recharts";
+import { Toaster as SonnerToaster, toast as sonnerToast } from "sonner";
 import {
   LayoutDashboard, Users, Building2, Briefcase, ClipboardList, BarChart2,
   Settings, Bell, Search, LogOut, Eye, Edit2, Trash2, Plus, FileText,
@@ -31,6 +32,8 @@ import {
   type AdminEncuesta,
   type AdminOferta,
   type ApiNotificacion,
+  type CarreraItem,
+  type ConfiguracionSistema,
   type EmpresaDashboardData,
   type EmpresaPostulacion,
   type EgresadoDashboardData,
@@ -54,6 +57,7 @@ type Screen =
   | "notificaciones";
 
 const HOME_BY_ROLE: Record<Role, Screen> = { admin: "admin-dashboard", empresa: "emp-dashboard", egresado: "egr-dashboard" };
+const LAST_SCREEN_STORAGE_PREFIX = "seg_egresado_bolsa.last_screen.";
 
 const ROLE_SCREENS: Record<Role, Set<Screen>> = {
   admin: new Set([
@@ -71,6 +75,20 @@ const ROLE_SCREENS: Record<Role, Set<Screen>> = {
 
 function canAccessScreen(role: Role, screen: Screen) {
   return ROLE_SCREENS[role].has(screen);
+}
+
+function lastScreenStorageKey(role: Role) {
+  return `${LAST_SCREEN_STORAGE_PREFIX}${role}`;
+}
+
+function readLastScreenForRole(role: Role): Screen {
+  const storedScreen = localStorage.getItem(lastScreenStorageKey(role)) as Screen | null;
+  return storedScreen && canAccessScreen(role, storedScreen) ? storedScreen : HOME_BY_ROLE[role];
+}
+
+function saveLastScreenForRole(role: Role, screen: Screen) {
+  const validScreen = canAccessScreen(role, screen) ? screen : HOME_BY_ROLE[role];
+  localStorage.setItem(lastScreenStorageKey(role), validScreen);
 }
 
 // ─── Mock Data (aligned with BD seg_egresado_bolsa) ──────────────────────────
@@ -264,12 +282,103 @@ const EGRESADO_DASHBOARD_FALLBACK: EgresadoDashboardData = {
 const DEFAULT_PAGE_SIZE = 10;
 const CRUD_PHASE_MESSAGE = "Función disponible en la fase de CRUD.";
 
-function unavailableCrudAction() {
-  window.alert(CRUD_PHASE_MESSAGE);
-}
-
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Ocurrió un error inesperado.";
+}
+
+type ToastVariant = "success" | "error" | "warning" | "info";
+type ConfirmOptions = {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  variant?: "danger" | "primary";
+};
+type FeedbackContextValue = {
+  toast: (variant: ToastVariant, title: string, message?: string) => void;
+  requestConfirmation: (options: ConfirmOptions) => Promise<boolean>;
+};
+
+let globalToastHandler: FeedbackContextValue["toast"] | null = null;
+
+function notifySystem(variant: ToastVariant, title: string, message?: string) {
+  globalToastHandler?.(variant, title, message);
+}
+
+function unavailableCrudAction() {
+  notifySystem("info", CRUD_PHASE_MESSAGE);
+}
+
+const FeedbackContext = createContext<FeedbackContextValue | null>(null);
+
+function useFeedback() {
+  const context = useContext(FeedbackContext);
+  if (!context) throw new Error("useFeedback debe usarse dentro de FeedbackProvider.");
+  return context;
+}
+
+function FeedbackProvider({ children }: { children: React.ReactNode }) {
+  const [confirmState, setConfirmState] = useState<(ConfirmOptions & { resolve: (value: boolean) => void }) | null>(null);
+
+  const toast = useCallback<FeedbackContextValue["toast"]>((variant, title, message) => {
+    const style = toastStyles[variant];
+    sonnerToast.custom((id) => (
+      <div style={{ display: "flex", gap: 12, padding: "14px 16px", background: style.background, border: `1px solid ${style.border}`, borderRadius: 10, boxShadow: "0 14px 36px rgba(15,23,42,0.16)", color: style.color, width: 360, maxWidth: "calc(100vw - 44px)" }}>
+        <div style={{ flexShrink: 0, marginTop: 1 }}>{style.icon}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#0F172A", marginBottom: message ? 3 : 0 }}>{title}</div>
+          {message && <div style={{ fontSize: 12.5, lineHeight: 1.45 }}>{message}</div>}
+        </div>
+        <button type="button" onClick={() => sonnerToast.dismiss(id)} style={{ width: 24, height: 24, border: "none", background: "transparent", cursor: "pointer", color: style.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><X size={14} /></button>
+      </div>
+    ), { duration: 4200 });
+  }, []);
+
+  const requestConfirmation = useCallback<FeedbackContextValue["requestConfirmation"]>((options) => (
+    new Promise<boolean>((resolve) => {
+      setConfirmState({ ...options, resolve });
+    })
+  ), []);
+
+  useEffect(() => {
+    globalToastHandler = toast;
+    return () => {
+      if (globalToastHandler === toast) globalToastHandler = null;
+    };
+  }, [toast]);
+
+  const toastStyles: Record<ToastVariant, { border: string; background: string; color: string; icon: React.ReactNode }> = {
+    success: { border: "#BBF7D0", background: "#F0FDF4", color: "#166534", icon: <CheckCircle size={18} /> },
+    error: { border: "#FECACA", background: "#FEF2F2", color: "#991B1B", icon: <AlertCircle size={18} /> },
+    warning: { border: "#FDE68A", background: "#FFFBEB", color: "#92400E", icon: <AlertCircle size={18} /> },
+    info: { border: "#BFDBFE", background: "#EFF6FF", color: "#1E40AF", icon: <Info size={18} /> },
+  };
+
+  function closeConfirm(value: boolean) {
+    confirmState?.resolve(value);
+    setConfirmState(null);
+  }
+
+  return (
+    <FeedbackContext.Provider value={{ toast, requestConfirmation }}>
+      {children}
+      <SonnerToaster position="top-right" expand visibleToasts={4} offset={{ top: 76, right: 22 }} />
+      {confirmState && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 550, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 440, boxShadow: "0 24px 64px rgba(0,0,0,0.3)", overflow: "hidden" }}>
+            <div style={{ padding: "22px 24px 12px" }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: "#0F172A", marginBottom: 8 }}>{confirmState.title}</div>
+              <div style={{ fontSize: 13, lineHeight: 1.6, color: "#64748B" }}>{confirmState.message}</div>
+            </div>
+            <div style={{ padding: "16px 24px 22px", display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button type="button" onClick={() => closeConfirm(false)} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #D1D5DB", background: "#fff", color: "#374151", fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>{confirmState.cancelLabel ?? "Cancelar"}</button>
+              <button type="button" onClick={() => closeConfirm(true)} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: confirmState.variant === "danger" ? "#DC2626" : "#2563EB", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{confirmState.confirmLabel ?? "Confirmar"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </FeedbackContext.Provider>
+  );
 }
 
 function paginatedFallback<T>(items: T[], page = 1, pageSize = DEFAULT_PAGE_SIZE): PaginatedResponse<T> {
@@ -352,7 +461,7 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
 function Btn({ children, variant = "primary", onClick, small, disabled }: { children: React.ReactNode; variant?: "primary" | "ghost" | "danger" | "outline" | "success"; onClick?: () => void; small?: boolean; disabled?: boolean }) {
   const base: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 500, border: "none", cursor: disabled ? "not-allowed" : "pointer", borderRadius: 8, padding: small ? "5px 11px" : "9px 18px", fontSize: small ? 13 : 14, fontFamily: "inherit", opacity: disabled ? 0.5 : 1 };
   const variants: Record<string, React.CSSProperties> = { primary: { background: "#2563EB", color: "#fff" }, ghost: { background: "transparent", color: "#64748B" }, danger: { background: "#FEE2E2", color: "#991B1B", border: "none" }, outline: { background: "#fff", color: "#374151", border: "1px solid #D1D5DB" }, success: { background: "#DCFCE7", color: "#166534", border: "none" } };
-  return <button style={{ ...base, ...variants[variant] }} onClick={disabled ? undefined : onClick} disabled={disabled}>{children}</button>;
+  return <button type="button" style={{ ...base, ...variants[variant] }} onClick={disabled ? undefined : onClick} disabled={disabled}>{children}</button>;
 }
 
 function TH({ label }: { label: string }) {
@@ -397,6 +506,70 @@ function FormField({ label, required, children, hint }: { label: string; require
 }
 
 const INP: React.CSSProperties = { width: "100%", padding: "10px 14px", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 13, color: "#0F172A", background: "#fff", outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
+
+function toDateInputValue(value: string | null | undefined) {
+  return value ? value.slice(0, 10) : "";
+}
+
+function readOfertaForm(formElement: HTMLFormElement): Partial<AdminOferta> | null {
+  const form = new FormData(formElement);
+  const salarioRaw = String(form.get("salario") ?? "").trim();
+  const salario = salarioRaw ? Number(salarioRaw) : null;
+
+  if (salario !== null && (!Number.isFinite(salario) || salario <= 0)) {
+    notifySystem("warning", "Validación de oferta", "El salario debe ser mayor a 0 si se informa.");
+    return null;
+  }
+
+  return {
+    titulo: String(form.get("titulo") ?? "").trim(),
+    descripcion: String(form.get("descripcion") ?? "").trim(),
+    puesto: String(form.get("puesto") ?? "").trim(),
+    area: String(form.get("area") ?? "").trim(),
+    ubicacion: String(form.get("ubicacion") ?? "").trim(),
+    modalidad: String(form.get("modalidad") ?? "").trim(),
+    tipo_contrato: String(form.get("tipo_contrato") ?? "").trim(),
+    salario,
+    requisitos: String(form.get("requisitos") ?? "").trim(),
+    fecha_cierre: String(form.get("fecha_cierre") ?? "").trim(),
+    estado_oferta: String(form.get("estado_oferta") ?? "").trim(),
+  };
+}
+
+function readAdminEgresadoForm(formElement: HTMLFormElement): Record<string, unknown> {
+  const form = new FormData(formElement);
+  return {
+    nombre_usuario: String(form.get("nombre_usuario") ?? "").trim(),
+    password: String(form.get("password") ?? "").trim(),
+    correo: String(form.get("correo") ?? "").trim(),
+    estado_usuario: String(form.get("estado_usuario") ?? "").trim(),
+    dni: String(form.get("dni") ?? "").trim(),
+    nombre_egresado: String(form.get("nombre_egresado") ?? "").trim(),
+    apellidos_egresado: String(form.get("apellidos_egresado") ?? "").trim(),
+    telefono: String(form.get("telefono") ?? "").trim(),
+    direccion: String(form.get("direccion") ?? "").trim(),
+    fecha_egreso: String(form.get("fecha_egreso") ?? "").trim(),
+    sexo: String(form.get("sexo") ?? "").trim(),
+    id_carrera: Number(form.get("id_carrera")),
+  };
+}
+
+function readAdminEmpresaForm(formElement: HTMLFormElement): Record<string, unknown> {
+  const form = new FormData(formElement);
+  return {
+    nombre_usuario: String(form.get("nombre_usuario") ?? "").trim(),
+    password: String(form.get("password") ?? "").trim(),
+    correo: String(form.get("correo") ?? "").trim(),
+    estado_usuario: String(form.get("estado_usuario") ?? "").trim(),
+    ruc: String(form.get("ruc") ?? "").trim(),
+    razon_social: String(form.get("razon_social") ?? "").trim(),
+    nombre_comercial: String(form.get("nombre_comercial") ?? "").trim(),
+    sector: String(form.get("sector") ?? "").trim(),
+    direccion: String(form.get("direccion") ?? "").trim(),
+    telefono: String(form.get("telefono") ?? "").trim(),
+    pagina_web: String(form.get("pagina_web") ?? "").trim(),
+  };
+}
 
 // ─── Detail Modal ─────────────────────────────────────────────────────────────
 function DetailModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
@@ -717,17 +890,23 @@ function AdminDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // ─── ADMIN: Egresados ─────────────────────────────────────────────────────────
 function AdminEgresados() {
+  const { toast, requestConfirmation } = useFeedback();
   const [search, setSearch] = useState("");
   const [facultadFiltro, setFacultadFiltro] = useState("Todas");
   const [sexoFiltro, setSexoFiltro] = useState("Todos");
   const [selected, setSelected] = useState<AdminEgresado | null>(null);
+  const [editing, setEditing] = useState<AdminEgresado | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const carreras = useApiData<CarreraItem[]>(true, () => egresadoApi.carreras(), []);
   const fallback = paginatedFallback(EGRESADOS as AdminEgresado[], page);
   const egresadosPage = usePaginatedApiData(
     true,
     () => adminApi.egresados({ page, pageSize: DEFAULT_PAGE_SIZE, search, facultad: facultadFiltro, sexo: sexoFiltro }),
     fallback,
-    [page, search, facultadFiltro, sexoFiltro]
+    [page, search, facultadFiltro, sexoFiltro, refreshKey]
   );
   const egresados = egresadosPage.items;
 
@@ -737,9 +916,84 @@ function AdminEgresados() {
 
   const filtered = egresados;
   const facultades = [...new Set((EGRESADOS as AdminEgresado[]).concat(egresados).map(e => e.nombre_facultad))];
+  const formItem = editing;
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const payload = readAdminEgresadoForm(event.currentTarget);
+    setSaving(true);
+    try {
+      if (formItem) {
+        await adminApi.actualizarEgresado(formItem.id_usuario, payload);
+        toast("success", "Egresado actualizado correctamente.");
+      } else {
+        await adminApi.crearEgresado(payload);
+        toast("success", "Egresado creado correctamente.");
+      }
+      setEditing(null);
+      setCreating(false);
+      setSelected(null);
+      setRefreshKey(k => k + 1);
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(item: AdminEgresado) {
+    const confirmed = await requestConfirmation({
+      title: "Eliminar egresado",
+      message: `¿Deseas eliminar a ${item.nombre_egresado} ${item.apellidos_egresado}? Solo se eliminará si la base de datos no tiene registros relacionados.`,
+      confirmLabel: "Eliminar",
+      variant: "danger",
+    });
+    if (!confirmed) return;
+
+    try {
+      await adminApi.eliminarEgresado(item.id_usuario);
+      toast("success", "Egresado eliminado correctamente.");
+      setRefreshKey(k => k + 1);
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    }
+  }
 
   return (
     <div>
+      {(creating || editing) && (
+        <DetailModal title={formItem ? `Editar Egresado: ${formItem.nombre_egresado}` : "Nuevo Egresado"} onClose={() => { setCreating(false); setEditing(null); }}>
+          <form onSubmit={handleSubmit}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+              <FormField label="nombre_usuario" required><input name="nombre_usuario" style={INP} defaultValue={formItem?.nombre_usuario ?? ""} required /></FormField>
+              <FormField label={formItem ? "password (opcional)" : "password"} required={!formItem}><input name="password" style={INP} type="password" required={!formItem} /></FormField>
+              <FormField label="correo" required><input name="correo" type="email" style={INP} defaultValue={formItem?.correo ?? ""} required /></FormField>
+              <FormField label="estado_usuario" required><select name="estado_usuario" style={INP} defaultValue={formItem?.estado_usuario ?? "Activo"}><option>Activo</option><option>Inactivo</option></select></FormField>
+              <FormField label="dni" required><input name="dni" style={INP} defaultValue={formItem?.dni ?? ""} maxLength={8} required /></FormField>
+              <FormField label="sexo" required><select name="sexo" style={INP} defaultValue={formItem?.sexo ?? "M"}><option value="M">Masculino (M)</option><option value="F">Femenino (F)</option></select></FormField>
+              <FormField label="nombre_egresado" required><input name="nombre_egresado" style={INP} defaultValue={formItem?.nombre_egresado ?? ""} required /></FormField>
+              <FormField label="apellidos_egresado" required><input name="apellidos_egresado" style={INP} defaultValue={formItem?.apellidos_egresado ?? ""} required /></FormField>
+              <FormField label="telefono"><input name="telefono" style={INP} defaultValue={formItem?.telefono ?? ""} /></FormField>
+              <FormField label="fecha_egreso" required><input name="fecha_egreso" type="date" style={INP} defaultValue={toDateInputValue(formItem?.fecha_egreso)} required /></FormField>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <FormField label="id_carrera" required>
+                  <select name="id_carrera" style={INP} defaultValue={formItem?.id_carrera ?? ""} required>
+                    <option value="">Seleccionar...</option>
+                    {carreras.map(c => <option key={c.id_carrera} value={c.id_carrera}>{c.nombre_carrera} - {c.nombre_facultad}</option>)}
+                  </select>
+                </FormField>
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <FormField label="direccion"><input name="direccion" style={INP} defaultValue={formItem?.direccion ?? ""} /></FormField>
+              </div>
+            </div>
+            <div style={{ marginTop: 24, display: "flex", gap: 10 }}>
+              <button type="submit" disabled={saving} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.65 : 1 }}>{saving ? "Guardando..." : "Guardar"}</button>
+              <Btn variant="outline" onClick={() => { setCreating(false); setEditing(null); }}>Cancelar</Btn>
+            </div>
+          </form>
+        </DetailModal>
+      )}
       {selected && (
         <DetailModal title={`Detalle Egresado: ${selected.nombre_egresado} ${selected.apellidos_egresado}`} onClose={() => setSelected(null)}>
           <DetailSection title="tabla: usuario (datos de acceso)">
@@ -766,7 +1020,7 @@ function AdminEgresados() {
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Gestión de Egresados" subtitle={`${egresadosPage.total} registros en tabla egresado`} action={<Btn onClick={unavailableCrudAction}><Plus size={14} /> Nuevo Egresado</Btn>} />
+      <PageHeader title="Gestión de Egresados" subtitle={`${egresadosPage.total} registros en tabla egresado`} action={<Btn onClick={() => setCreating(true)}><Plus size={14} /> Nuevo Egresado</Btn>} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10, alignItems: "center" }}>
           <SearchBar value={search} onChange={setSearch} placeholder="Buscar por dni, nombre_egresado, apellidos_egresado..." />
@@ -797,8 +1051,8 @@ function AdminEgresados() {
                   <TD>
                     <div style={{ display: "flex", gap: 2 }}>
                       <Btn variant="outline" small onClick={() => setSelected(e)}><Eye size={14} /></Btn>
-                      <Btn variant="ghost" small onClick={unavailableCrudAction}><Edit2 size={14} /></Btn>
-                      <Btn variant="danger" small onClick={unavailableCrudAction}><Trash2 size={14} /></Btn>
+                      <Btn variant="ghost" small onClick={() => setEditing(e)}><Edit2 size={14} /></Btn>
+                      <Btn variant="danger" small onClick={() => handleDelete(e)}><Trash2 size={14} /></Btn>
                     </div>
                   </TD>
                 </tr>
@@ -814,16 +1068,21 @@ function AdminEgresados() {
 
 // ─── ADMIN: Empresas ──────────────────────────────────────────────────────────
 function AdminEmpresas() {
+  const { toast, requestConfirmation } = useFeedback();
   const [search, setSearch] = useState("");
   const [sectorFiltro, setSectorFiltro] = useState("Todos");
   const [selected, setSelected] = useState<AdminEmpresa | null>(null);
+  const [editing, setEditing] = useState<AdminEmpresa | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
+  const [refreshKey, setRefreshKey] = useState(0);
   const fallback = paginatedFallback(EMPRESAS as AdminEmpresa[], page);
   const empresasPage = usePaginatedApiData(
     true,
     () => adminApi.empresas({ page, pageSize: DEFAULT_PAGE_SIZE, search, sector: sectorFiltro }),
     fallback,
-    [page, search, sectorFiltro]
+    [page, search, sectorFiltro, refreshKey]
   );
   const filtered = empresasPage.items;
   const sectores = [...new Set((EMPRESAS as AdminEmpresa[]).concat(filtered).map(e => e.sector))];
@@ -831,9 +1090,76 @@ function AdminEmpresas() {
   useEffect(() => {
     setPage(1);
   }, [search, sectorFiltro]);
+  const formItem = editing;
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const payload = readAdminEmpresaForm(event.currentTarget);
+    setSaving(true);
+    try {
+      if (formItem) {
+        await adminApi.actualizarEmpresa(formItem.id_usuario, payload);
+        toast("success", "Empresa actualizada correctamente.");
+      } else {
+        await adminApi.crearEmpresa(payload);
+        toast("success", "Empresa creada correctamente.");
+      }
+      setEditing(null);
+      setCreating(false);
+      setSelected(null);
+      setRefreshKey(k => k + 1);
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(item: AdminEmpresa) {
+    const confirmed = await requestConfirmation({
+      title: "Eliminar empresa",
+      message: `¿Deseas eliminar "${item.razon_social}"? Solo se eliminará si no tiene ofertas u otros registros relacionados.`,
+      confirmLabel: "Eliminar",
+      variant: "danger",
+    });
+    if (!confirmed) return;
+
+    try {
+      await adminApi.eliminarEmpresa(item.id_usuario);
+      toast("success", "Empresa eliminada correctamente.");
+      setRefreshKey(k => k + 1);
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    }
+  }
 
   return (
     <div>
+      {(creating || editing) && (
+        <DetailModal title={formItem ? `Editar Empresa: ${formItem.razon_social}` : "Nueva Empresa"} onClose={() => { setCreating(false); setEditing(null); }}>
+          <form onSubmit={handleSubmit}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+              <FormField label="nombre_usuario" required><input name="nombre_usuario" style={INP} defaultValue={formItem?.nombre_usuario ?? ""} required /></FormField>
+              <FormField label={formItem ? "password (opcional)" : "password"} required={!formItem}><input name="password" style={INP} type="password" required={!formItem} /></FormField>
+              <FormField label="correo" required><input name="correo" type="email" style={INP} defaultValue={formItem?.correo ?? ""} required /></FormField>
+              <FormField label="estado_usuario" required><select name="estado_usuario" style={INP} defaultValue={formItem?.estado_usuario ?? "Activo"}><option>Activo</option><option>Inactivo</option></select></FormField>
+              <FormField label="ruc" required><input name="ruc" style={INP} defaultValue={formItem?.ruc ?? ""} maxLength={11} required /></FormField>
+              <FormField label="razon_social" required><input name="razon_social" style={INP} defaultValue={formItem?.razon_social ?? ""} required /></FormField>
+              <FormField label="nombre_comercial"><input name="nombre_comercial" style={INP} defaultValue={formItem?.nombre_comercial ?? ""} /></FormField>
+              <FormField label="sector" required><input name="sector" style={INP} defaultValue={formItem?.sector ?? ""} required /></FormField>
+              <FormField label="telefono"><input name="telefono" style={INP} defaultValue={formItem?.telefono ?? ""} /></FormField>
+              <FormField label="pagina_web"><input name="pagina_web" style={INP} defaultValue={formItem?.pagina_web ?? ""} placeholder="www.ejemplo.com" /></FormField>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <FormField label="direccion" required><input name="direccion" style={INP} defaultValue={formItem?.direccion ?? ""} required /></FormField>
+              </div>
+            </div>
+            <div style={{ marginTop: 24, display: "flex", gap: 10 }}>
+              <button type="submit" disabled={saving} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.65 : 1 }}>{saving ? "Guardando..." : "Guardar"}</button>
+              <Btn variant="outline" onClick={() => { setCreating(false); setEditing(null); }}>Cancelar</Btn>
+            </div>
+          </form>
+        </DetailModal>
+      )}
       {selected && (
         <DetailModal title={`Detalle Empresa: ${selected.razon_social}`} onClose={() => setSelected(null)}>
           <DetailSection title="tabla: usuario (datos de acceso)">
@@ -852,7 +1178,7 @@ function AdminEmpresas() {
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Gestión de Empresas" subtitle={`${empresasPage.total} registros en tabla empresa`} action={<Btn onClick={unavailableCrudAction}><Plus size={14} /> Nueva Empresa</Btn>} />
+      <PageHeader title="Gestión de Empresas" subtitle={`${empresasPage.total} registros en tabla empresa`} action={<Btn onClick={() => setCreating(true)}><Plus size={14} /> Nueva Empresa</Btn>} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
           <SearchBar value={search} onChange={setSearch} placeholder="Buscar por razon_social, ruc, sector..." />
@@ -876,8 +1202,8 @@ function AdminEmpresas() {
                 <TD>
                   <div style={{ display: "flex", gap: 2 }}>
                     <Btn variant="outline" small onClick={() => setSelected(e)}><Eye size={14} /></Btn>
-                    <Btn variant="ghost" small onClick={unavailableCrudAction}><Edit2 size={14} /></Btn>
-                    <Btn variant="danger" small onClick={unavailableCrudAction}><Trash2 size={14} /></Btn>
+                    <Btn variant="ghost" small onClick={() => setEditing(e)}><Edit2 size={14} /></Btn>
+                    <Btn variant="danger" small onClick={() => handleDelete(e)}><Trash2 size={14} /></Btn>
                   </div>
                 </TD>
               </tr>
@@ -892,7 +1218,10 @@ function AdminEmpresas() {
 
 // ─── ADMIN: Ofertas ───────────────────────────────────────────────────────────
 function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScreen?: (s: Screen) => void }) {
+  const { toast, requestConfirmation } = useFeedback();
   const [selected, setSelected] = useState<AdminOferta | null>(null);
+  const [editing, setEditing] = useState<AdminOferta | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
   const [modalidadFiltro, setModalidadFiltro] = useState("Todos");
   const [page, setPage] = useState(1);
@@ -912,75 +1241,131 @@ function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScree
     setPage(1);
   }, [estadoFiltro, modalidadFiltro]);
 
-  async function handleEditOferta(oferta: AdminOferta) {
-    if (useApi) {
-      unavailableCrudAction();
-      return;
-    }
+  function handleEditOferta(oferta: AdminOferta) {
+    setEditing(oferta);
+  }
 
-    const titulo = window.prompt("titulo", oferta.titulo);
-    if (titulo == null) return;
-    const descripcion = window.prompt("descripcion", oferta.descripcion);
-    if (descripcion == null) return;
-    const puesto = window.prompt("puesto", oferta.puesto);
-    if (puesto == null) return;
-    const area = window.prompt("area", oferta.area);
-    if (area == null) return;
-    const ubicacion = window.prompt("ubicacion", oferta.ubicacion);
-    if (ubicacion == null) return;
-    const modalidad = window.prompt("modalidad", oferta.modalidad);
-    if (modalidad == null) return;
-    const tipo_contrato = window.prompt("tipo_contrato", oferta.tipo_contrato);
-    if (tipo_contrato == null) return;
-    const salarioRaw = window.prompt("salario", oferta.salario != null ? String(oferta.salario) : "");
-    if (salarioRaw == null) return;
-    const requisitos = window.prompt("requisitos", oferta.requisitos ?? "");
-    if (requisitos == null) return;
-    const fecha_cierre = window.prompt("fecha_cierre", oferta.fecha_cierre);
-    if (fecha_cierre == null) return;
-    const estado_oferta = window.prompt("estado_oferta", oferta.estado_oferta);
-    if (estado_oferta == null) return;
+  async function handleEditSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing) return;
 
+    const payload = readOfertaForm(event.currentTarget);
+    if (!payload) return;
+
+    setSavingEdit(true);
     try {
-      await empresaApi.actualizarOferta(oferta.id_oferta, {
-        titulo,
-        descripcion,
-        puesto,
-        area,
-        ubicacion,
-        modalidad,
-        tipo_contrato,
-        salario: salarioRaw.trim() ? Number(salarioRaw) : null,
-        requisitos,
-        fecha_cierre,
-        estado_oferta,
-      });
-      window.alert("Oferta actualizada correctamente.");
+      if (useApi) {
+        await adminApi.actualizarOferta(editing.id_oferta, payload);
+      } else {
+        await empresaApi.actualizarOferta(editing.id_oferta, payload);
+      }
+      toast("success", "Oferta actualizada correctamente.");
       setRefreshKey(k => k + 1);
+      setEditing(null);
       setSelected(null);
     } catch (error) {
-      window.alert(getErrorMessage(error));
+      toast("error", getErrorMessage(error));
+    } finally {
+      setSavingEdit(false);
     }
   }
 
-  async function handleCloseOferta(oferta: AdminOferta) {
-    if (useApi) {
-      unavailableCrudAction();
+  async function handleToggleOfertaEstado(oferta: AdminOferta) {
+    const nextEstado = oferta.estado_oferta === "Cerrada" ? "Activa" : "Cerrada";
+    const confirmed = await requestConfirmation({
+      title: nextEstado === "Activa" ? "Reactivar oferta" : "Cerrar oferta",
+      message: `¿Deseas ${nextEstado === "Activa" ? "reactivar" : "cerrar"} la oferta "${oferta.titulo}"?`,
+      confirmLabel: nextEstado === "Activa" ? "Reactivar" : "Cerrar",
+      variant: nextEstado === "Activa" ? "primary" : "danger",
+    });
+    if (!confirmed) {
+      toast("info", "Operación cancelada.");
       return;
     }
 
     try {
-      await empresaApi.cerrarOferta(oferta.id_oferta);
-      window.alert("Oferta cerrada correctamente.");
+      if (useApi) {
+        await adminApi.cambiarEstadoOferta(oferta.id_oferta, nextEstado);
+      } else {
+        await empresaApi.cambiarEstadoOferta(oferta.id_oferta, nextEstado);
+      }
+      toast("success", nextEstado === "Activa" ? "Oferta reactivada correctamente." : "Oferta cerrada correctamente.");
       setRefreshKey(k => k + 1);
       setSelected(null);
     } catch (error) {
-      window.alert(getErrorMessage(error));
+      toast("error", getErrorMessage(error));
+    }
+  }
+
+  async function handleDeleteOferta(oferta: AdminOferta) {
+    const confirmed = await requestConfirmation({
+      title: "Eliminar oferta",
+      message: `¿Deseas eliminar la oferta "${oferta.titulo}"? Esta acción solo se permite si no tiene postulaciones asociadas.`,
+      confirmLabel: "Eliminar",
+      variant: "danger",
+    });
+    if (!confirmed) {
+      toast("info", "Operación cancelada.");
+      return;
+    }
+
+    try {
+      if (useApi) {
+        await adminApi.eliminarOferta(oferta.id_oferta);
+      } else {
+        await empresaApi.eliminarOferta(oferta.id_oferta);
+      }
+      toast("success", "Oferta eliminada correctamente.");
+      setRefreshKey(k => k + 1);
+      setSelected(null);
+    } catch (error) {
+      toast("error", getErrorMessage(error));
     }
   }
 
   return (
     <div>
+      {editing && (
+        <DetailModal title={`Editar Oferta: ${editing.titulo}`} onClose={() => setEditing(null)}>
+          <form onSubmit={handleEditSubmit}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <FormField label="Título (VARCHAR 150)" required><input name="titulo" style={INP} defaultValue={editing.titulo} required /></FormField>
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <FormField label="Descripción (TEXT)" required><textarea name="descripcion" style={{ ...INP, height: 100, resize: "vertical" }} defaultValue={editing.descripcion} required /></FormField>
+              </div>
+              <FormField label="Puesto (VARCHAR 100)" required><input name="puesto" style={INP} defaultValue={editing.puesto} required /></FormField>
+              <FormField label="Área (VARCHAR 100)" required><input name="area" style={INP} defaultValue={editing.area} required /></FormField>
+              <FormField label="Ubicación (VARCHAR 150)" required><input name="ubicacion" style={INP} defaultValue={editing.ubicacion} required /></FormField>
+              <FormField label="Modalidad (VARCHAR 50)" required>
+                <select name="modalidad" style={INP} defaultValue={editing.modalidad} required>
+                  <option>Presencial</option><option>Remoto</option><option>Híbrido</option>
+                </select>
+              </FormField>
+              <FormField label="Tipo de contrato (VARCHAR 50)" required>
+                <select name="tipo_contrato" style={INP} defaultValue={editing.tipo_contrato} required>
+                  <option>Indefinido</option><option>Temporal</option><option>Practicante</option>
+                </select>
+              </FormField>
+              <FormField label="Salario — DECIMAL(10,2)" hint="Campo nullable. Dejar vacío si no se desea publicar."><input name="salario" style={INP} type="number" step="0.01" defaultValue={editing.salario ?? ""} /></FormField>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <FormField label="Requisitos (TEXT)" hint="Campo nullable."><textarea name="requisitos" style={{ ...INP, height: 80, resize: "vertical" }} defaultValue={editing.requisitos ?? ""} /></FormField>
+              </div>
+              <FormField label="Fecha cierre (DATE)" required><input name="fecha_cierre" style={INP} type="date" defaultValue={toDateInputValue(editing.fecha_cierre)} required /></FormField>
+              <FormField label="Estado oferta (VARCHAR 20)" required>
+                <select name="estado_oferta" style={INP} defaultValue={editing.estado_oferta} required>
+                  <option>Activa</option><option>Cerrada</option>
+                </select>
+              </FormField>
+            </div>
+            <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
+              <button type="submit" disabled={savingEdit} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: savingEdit ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: savingEdit ? 0.65 : 1 }}>{savingEdit ? "Guardando..." : "Guardar cambios"}</button>
+              <Btn variant="outline" onClick={() => setEditing(null)} disabled={savingEdit}>Cancelar</Btn>
+            </div>
+          </form>
+        </DetailModal>
+      )}
       {selected && (
         <DetailModal title={`Detalle Oferta: ${selected.titulo}`} onClose={() => setSelected(null)}>
           <DetailSection title="tabla: oferta_laboral">
@@ -1030,7 +1415,8 @@ function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScree
                     <div style={{ display: "flex", gap: 2 }}>
                       <Btn variant="outline" small onClick={() => setSelected(o)}><Eye size={14} /></Btn>
                       <Btn variant="ghost" small onClick={() => handleEditOferta(o)}><Edit2 size={14} /></Btn>
-                      <Btn variant="outline" small onClick={() => handleCloseOferta(o)}>Cerrar</Btn>
+                      <Btn variant="outline" small onClick={() => handleToggleOfertaEstado(o)}>{o.estado_oferta === "Cerrada" ? "Reactivar" : "Cerrar"}</Btn>
+                      <Btn variant="danger" small onClick={() => handleDeleteOferta(o)}><Trash2 size={14} /></Btn>
                     </div>
                   </TD>
                 </tr>
@@ -1046,22 +1432,43 @@ function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScree
 
 // ─── ADMIN: Encuestas ─────────────────────────────────────────────────────────
 function AdminEncuestas() {
+  const { toast, requestConfirmation } = useFeedback();
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AdminEncuesta | null>(null);
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
+  const [refreshKey, setRefreshKey] = useState(0);
   const localEncuestas = (ENCUESTAS as AdminEncuesta[]).filter(e => estadoFiltro === "Todos" || e.estado_laboral === estadoFiltro);
   const fallback = paginatedFallback(localEncuestas, page);
   const encuestasPage = usePaginatedApiData(
     true,
     () => adminApi.encuestas({ page, pageSize: DEFAULT_PAGE_SIZE, estadoLaboral: estadoFiltro }),
     fallback,
-    [page, estadoFiltro]
+    [page, estadoFiltro, refreshKey]
   );
   const filtered = encuestasPage.items;
 
   useEffect(() => {
     setPage(1);
   }, [estadoFiltro]);
+
+  async function handleDelete(item: AdminEncuesta) {
+    const confirmed = await requestConfirmation({
+      title: "Eliminar encuesta",
+      message: `¿Deseas eliminar la encuesta ${item.id_encuesta}? Solo se eliminará si las restricciones de la base de datos lo permiten.`,
+      confirmLabel: "Eliminar",
+      variant: "danger",
+    });
+    if (!confirmed) return;
+
+    try {
+      await adminApi.eliminarEncuesta(item.id_encuesta);
+      toast("success", "Encuesta eliminada correctamente.");
+      setSelected(null);
+      setRefreshKey(k => k + 1);
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    }
+  }
 
   return (
     <div>
@@ -1109,7 +1516,7 @@ function AdminEncuestas() {
                 <TD>
                   <div style={{ display: "flex", gap: 2 }}>
                     <Btn variant="outline" small onClick={() => setSelected(e)}><Eye size={14} /></Btn>
-                    <Btn variant="ghost" small onClick={unavailableCrudAction}><Edit2 size={14} /></Btn>
+                    <Btn variant="danger" small onClick={() => handleDelete(e)}><Trash2 size={14} /></Btn>
                   </div>
                 </TD>
               </tr>
@@ -1220,17 +1627,57 @@ function Reportes() {
 
 // ─── ADMIN: Configuración ─────────────────────────────────────────────────────
 function Configuracion() {
+  const { toast } = useFeedback();
   const [estado, setEstado] = useState("Activo");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const loadConfiguracion = useCallback(() => {
+    void refreshKey;
+    return adminApi.configuracion();
+  }, [refreshKey]);
+  const config = useApiData<ConfiguracionSistema | null>(true, loadConfiguracion, null);
+
+  useEffect(() => {
+    if (config?.estado_sistema) {
+      setEstado(config.estado_sistema);
+    }
+  }, [config?.estado_sistema]);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setSaving(true);
+    try {
+      await adminApi.actualizarConfiguracion({
+        nombre_universidad: String(form.get("nombre_universidad") ?? "").trim(),
+        correo_institucional: String(form.get("correo_institucional") ?? "").trim(),
+        telefono: String(form.get("telefono") ?? "").trim(),
+        logo_url: String(form.get("logo_url") ?? "").trim(),
+        tiempo_entre_encuestas_meses: Number(form.get("tiempo_entre_encuestas_meses")),
+        estado_sistema: estado,
+        version_sistema: String(form.get("version_sistema") ?? "").trim(),
+      });
+      toast("success", "Configuración actualizada correctamente.");
+      setRefreshKey(k => k + 1);
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div>
       <PageHeader title="Configuración del Sistema" subtitle="Parámetros generales de la plataforma" />
+      <form onSubmit={handleSubmit}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, maxWidth: 900 }}>
         <Card style={{ padding: 28 }}>
           <div style={{ fontWeight: 700, fontSize: 15, color: "#0F172A", marginBottom: 20, paddingBottom: 14, borderBottom: "1px solid #F1F5F9" }}>Datos Institucionales</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-            <FormField label="Nombre de la Universidad" required><input style={INP} defaultValue="Universidad de Huánuco (UDH)" /></FormField>
-            <FormField label="Correo institucional"><input style={INP} defaultValue="egresados@udh.edu.pe" type="email" /></FormField>
-            <FormField label="Teléfono"><input style={INP} defaultValue="(062) 512-604" /></FormField>
+            <FormField label="Nombre de la Universidad" required><input name="nombre_universidad" style={INP} defaultValue={config?.nombre_universidad ?? ""} key={config?.nombre_universidad ?? "nombre"} required /></FormField>
+            <FormField label="Correo institucional"><input name="correo_institucional" style={INP} defaultValue={config?.correo_institucional ?? ""} key={config?.correo_institucional ?? "correo"} type="email" /></FormField>
+            <FormField label="Teléfono"><input name="telefono" style={INP} defaultValue={config?.telefono ?? ""} key={config?.telefono ?? "telefono"} /></FormField>
+            <FormField label="Logo URL"><input name="logo_url" style={INP} defaultValue={config?.logo_url ?? ""} key={config?.logo_url ?? "logo"} placeholder="https://..." /></FormField>
             <FormField label="Logo de la Universidad">
               <div style={{ border: "2px dashed #D1D5DB", borderRadius: 8, padding: "20px", textAlign: "center", cursor: "pointer" }}>
                 <Upload size={22} color="#9CA3AF" style={{ margin: "0 auto 8px" }} />
@@ -1245,11 +1692,12 @@ function Configuracion() {
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <FormField label="Tiempo entre encuestas laborales (meses)" required hint="Controla la lógica de habilitación de encuesta_seguimiento cada N meses.">
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input style={{ ...INP, width: 90 }} type="number" defaultValue={6} min={1} max={24} />
-                <span style={{ fontSize: 13, color: "#64748B" }}>meses (default: 6)</span>
+                <input name="tiempo_entre_encuestas_meses" style={{ ...INP, width: 90 }} type="number" defaultValue={config?.tiempo_entre_encuestas_meses ?? 0} key={config?.tiempo_entre_encuestas_meses ?? "meses"} min={0} max={24} />
+                <span style={{ fontSize: 13, color: "#64748B" }}>meses</span>
               </div>
+              <div style={{ fontSize: 12, color: "#64748B", marginTop: 6 }}>0 = permitir responder inmediatamente.</div>
             </FormField>
-            <FormField label="Estado del sistema" required hint="Corresponde a estado_usuario en tabla usuario para las cuentas administrador.">
+            <FormField label="Estado del sistema" required hint="Corresponde a configuracion_sistema.estado_sistema.">
               <div style={{ display: "flex", gap: 10 }}>
                 {["Activo", "Inactivo"].map(opt => (
                   <button key={opt} onClick={() => setEstado(opt)} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "2px solid", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, fontSize: 13, borderColor: estado === opt ? (opt === "Activo" ? "#10B981" : "#EF4444") : "#E2E8F0", background: estado === opt ? (opt === "Activo" ? "#DCFCE7" : "#FEE2E2") : "#fff", color: estado === opt ? (opt === "Activo" ? "#166534" : "#991B1B") : "#64748B" }}>
@@ -1260,8 +1708,9 @@ function Configuracion() {
             </FormField>
             <div style={{ padding: "14px 16px", background: "#F8FAFC", borderRadius: 10, border: "1px solid #E2E8F0" }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 8 }}>INFO BD</div>
-              {[{ label: "Admins registrados (tabla: administrador)", value: "3" }, { label: "Versión del sistema", value: "v1.0.0" }, { label: "Última actualización", value: "25/06/2026" }].map((r, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0", borderBottom: i < 2 ? "1px solid #F1F5F9" : "none" }}>
+              <FormField label="Versión del sistema" required><input name="version_sistema" style={INP} defaultValue={config?.version_sistema ?? ""} key={config?.version_sistema ?? "version"} required /></FormField>
+              {[{ label: "Admins registrados (tabla: administrador)", value: "3" }, { label: "Última actualización", value: config?.fecha_actualizacion ?? "Sin datos" }].map((r, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0", borderBottom: i < 1 ? "1px solid #F1F5F9" : "none" }}>
                   <span style={{ color: "#64748B" }}>{r.label}</span>
                   <span style={{ fontWeight: 600, color: "#0F172A" }}>{r.value}</span>
                 </div>
@@ -1270,7 +1719,8 @@ function Configuracion() {
           </div>
         </Card>
       </div>
-      <div style={{ marginTop: 24 }}><button onClick={unavailableCrudAction} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Guardar Configuración</button></div>
+      <div style={{ marginTop: 24 }}><button type="submit" disabled={saving || !config} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: saving || !config ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving || !config ? 0.65 : 1 }}>{saving ? "Guardando..." : "Guardar Configuración"}</button></div>
+      </form>
     </div>
   );
 }
@@ -1415,39 +1865,25 @@ function EmpresaDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
 // Campos según tabla oferta_laboral: titulo*, descripcion*, puesto*, area*, ubicacion*, modalidad*, tipo_contrato*, salario, requisitos, fecha_cierre*
 // fecha_publicacion: se asigna automáticamente. id_empresa: de la sesión activa.
 function CrearOferta() {
+  const { toast } = useFeedback();
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const fecha_cierre = String(form.get("fecha_cierre") ?? "");
-    const salarioRaw = String(form.get("salario") ?? "").trim();
-    const salario = salarioRaw ? Number(salarioRaw) : null;
-
-    if (salario !== null && salario <= 0) {
-      window.alert("El salario debe ser mayor a 0 si se informa.");
-      return;
-    }
+    const formElement = event.currentTarget;
+    const payload = readOfertaForm(formElement);
+    if (!payload) return;
 
     setSaving(true);
     try {
       await empresaApi.crearOferta({
-        titulo: String(form.get("titulo") ?? ""),
-        descripcion: String(form.get("descripcion") ?? ""),
-        puesto: String(form.get("puesto") ?? ""),
-        area: String(form.get("area") ?? ""),
-        ubicacion: String(form.get("ubicacion") ?? ""),
-        modalidad: String(form.get("modalidad") ?? ""),
-        tipo_contrato: String(form.get("tipo_contrato") ?? ""),
-        salario,
-        requisitos: String(form.get("requisitos") ?? ""),
-        fecha_cierre,
+        ...payload,
         estado_oferta: "Activa",
       });
-      event.currentTarget.reset();
-      window.alert("Oferta publicada correctamente.");
+      formElement.reset();
+      toast("success", "Oferta creada correctamente.");
     } catch (error) {
-      window.alert(getErrorMessage(error));
+      toast("error", getErrorMessage(error));
     } finally {
       setSaving(false);
     }
@@ -1503,6 +1939,7 @@ function CrearOferta() {
 // ─── EMPRESA: Postulaciones ───────────────────────────────────────────────────
 // tabla: postulacion — estado_postulacion: En Proceso | Aceptado | Pendiente | Rechazado
 function PostulacionesRecibidas() {
+  const { toast } = useFeedback();
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
   const [page, setPage] = useState(1);
@@ -1528,10 +1965,10 @@ function PostulacionesRecibidas() {
   async function handleEstadoPostulacion(id: number, estado: "Aceptado" | "Rechazado" | "Pendiente") {
     try {
       await empresaApi.cambiarEstadoPostulacion(id, estado);
-      window.alert("Estado de postulación actualizado correctamente.");
+      toast("success", "Estado de postulación actualizado correctamente.");
       setRefreshKey(k => k + 1);
     } catch (error) {
-      window.alert(getErrorMessage(error));
+      toast("error", getErrorMessage(error));
     }
   }
 
@@ -1597,6 +2034,7 @@ function PostulacionesRecibidas() {
 // correo: NO existe en tabla empresa. Viene de usuario.correo via JOIN.
 // NOTA: la tabla empresa NO tiene campo `descripcion`.
 function PerfilEmpresa() {
+  const { toast } = useFeedback();
   const profile = useApiData(true, empresaApi.perfil, EMPRESAS[0] as AdminEmpresa | null) ?? EMPRESAS[0];
   const [saving, setSaving] = useState(false);
 
@@ -1614,9 +2052,9 @@ function PerfilEmpresa() {
         correo: String(form.get("correo") ?? ""),
         pagina_web: String(form.get("pagina_web") ?? ""),
       });
-      window.alert("Perfil actualizado correctamente.");
+      toast("success", "Perfil actualizado correctamente.");
     } catch (error) {
-      window.alert(getErrorMessage(error));
+      toast("error", getErrorMessage(error));
     } finally {
       setSaving(false);
     }
@@ -1657,6 +2095,7 @@ function PerfilEmpresa() {
 
 // ─── EGRESADO: Dashboard ──────────────────────────────────────────────────────
 function EgresadoDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { toast } = useFeedback();
   const dashboard = useApiData(true, egresadoApi.dashboard, EGRESADO_DASHBOARD_FALLBACK);
   const profile = dashboard.profile ?? EGRESADO_PROFILE_FALLBACK;
   const profileItems = [
@@ -1666,6 +2105,15 @@ function EgresadoDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
     { label: "Encuesta completada", done: dashboard.metrics.encuestaCompletada },
   ];
   const completedProfile = Math.round((profileItems.filter(item => item.done).length / profileItems.length) * 100);
+
+  async function handlePostular(idOferta: number) {
+    try {
+      await egresadoApi.postular(idOferta);
+      toast("success", "Postulación registrada correctamente.");
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    }
+  }
 
   return (
     <div>
@@ -1697,7 +2145,7 @@ function EgresadoDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
                   <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>{o.empresa} · {o.modalidad} · {o.salario != null ? `S/. ${o.salario.toLocaleString()}` : "Sueldo no publicado"}</div>
                 </div>
               </div>
-              <button onClick={unavailableCrudAction} style={{ padding: "7px 14px", background: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Postular</button>
+              <button onClick={() => handlePostular(o.id_oferta)} style={{ padding: "7px 14px", background: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Postular</button>
             </div>
           ))}
         </Card>
@@ -1724,11 +2172,13 @@ function EgresadoDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // ─── EGRESADO: Bolsa Laboral ──────────────────────────────────────────────────
 function BolsaLaboral() {
+  const { toast } = useFeedback();
   const [search, setSearch] = useState("");
   const [modalidad, setModalidad] = useState("Todos");
   const [contrato, setContrato] = useState("Todos");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AdminOferta | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const localOfertas = (OFERTAS as AdminOferta[]).filter(o => {
     const q = search.toLowerCase();
@@ -1742,13 +2192,23 @@ function BolsaLaboral() {
     true,
     () => egresadoApi.bolsa({ page, pageSize: DEFAULT_PAGE_SIZE, search, modalidad, contrato }),
     fallback,
-    [page, search, modalidad, contrato]
+    [page, search, modalidad, contrato, refreshKey]
   );
   const filtered = ofertasPage.items;
 
   useEffect(() => {
     setPage(1);
   }, [search, modalidad, contrato]);
+
+  async function handlePostular(idOferta: number) {
+    try {
+      await egresadoApi.postular(idOferta);
+      toast("success", "Postulación registrada correctamente.");
+      setRefreshKey(k => k + 1);
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    }
+  }
 
   return (
     <div>
@@ -1808,7 +2268,7 @@ function BolsaLaboral() {
               ))}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={unavailableCrudAction} style={{ flex: 1, padding: "9px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Postular</button>
+              <button onClick={() => handlePostular(o.id_oferta)} style={{ flex: 1, padding: "9px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Postular</button>
               <button onClick={() => setSelected(o)} style={{ padding: "9px 14px", background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 8, cursor: "pointer" }}><Eye size={14} color="#64748B" /></button>
             </div>
             <div style={{ marginTop: 10, fontSize: 11, color: "#94A3B8" }}>Publicado: {o.fecha_publicacion} · Cierre: {o.fecha_cierre}</div>
@@ -1894,12 +2354,53 @@ function MisPostulaciones() {
 // tabla: usuario: nombre_usuario, correo, estado_usuario
 // NOTA: No existe campo `foto` en la BD. El avatar es solo visual.
 function MiPerfil() {
-  const profile = useApiData(true, egresadoApi.perfil, EGRESADO_PROFILE_FALLBACK) ?? EGRESADO_PROFILE_FALLBACK;
+  const { toast } = useFeedback();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const loadProfile = useCallback(() => {
+    void refreshKey;
+    return egresadoApi.perfil();
+  }, [refreshKey]);
+  const loadCarreras = useCallback(() => egresadoApi.carreras(), []);
+  const profile = useApiData(true, loadProfile, EGRESADO_PROFILE_FALLBACK) ?? EGRESADO_PROFILE_FALLBACK;
+  const carreras = useApiData<CarreraItem[]>(true, loadCarreras, []);
   const initials = `${profile.nombre_egresado[0] ?? ""}${profile.apellidos_egresado[0] ?? ""}`.toUpperCase();
+  const facultades = Array.from(new Set(carreras.map(c => c.nombre_facultad).concat(FACULTADES, profile.nombre_facultad)));
+  const carrerasDisponibles = carreras.length > 0
+    ? carreras
+    : [{ id_carrera: profile.id_carrera ?? 0, nombre_carrera: profile.nombre_carrera, grado_academico: profile.grado_academico, id_facultad: profile.id_facultad ?? 0, nombre_facultad: profile.nombre_facultad }];
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+
+    setSaving(true);
+    try {
+      await egresadoApi.actualizarPerfil({
+        dni: String(form.get("dni") ?? ""),
+        sexo: String(form.get("sexo") ?? ""),
+        nombre_egresado: String(form.get("nombre_egresado") ?? ""),
+        apellidos_egresado: String(form.get("apellidos_egresado") ?? ""),
+        telefono: String(form.get("telefono") ?? ""),
+        fecha_egreso: String(form.get("fecha_egreso") ?? ""),
+        direccion: String(form.get("direccion") ?? ""),
+        nombre_carrera: String(form.get("nombre_carrera") ?? ""),
+        correo: String(form.get("correo") ?? ""),
+      });
+      toast("success", "Perfil actualizado correctamente.");
+      setRefreshKey(k => k + 1);
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div>
       <PageHeader title="Mi Perfil" subtitle="Tablas: egresado + usuario (id_usuario compartido). Sin campo descripcion." />
       <Card key={profile.id_usuario} style={{ padding: 32, maxWidth: 820 }}>
+        <form onSubmit={handleSubmit}>
         <div style={{ display: "flex", gap: 24, alignItems: "flex-start", marginBottom: 28, paddingBottom: 24, borderBottom: "1px solid #F1F5F9" }}>
           <div style={{ flexShrink: 0 }}>
             <div style={{ width: 100, height: 100, borderRadius: 16, background: "linear-gradient(135deg, #2563EB, #6366F1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, fontWeight: 700, color: "#fff", marginBottom: 10 }}>{initials}</div>
@@ -1917,29 +2418,29 @@ function MiPerfil() {
 
         <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A", marginBottom: 14 }}>Datos Personales (tabla: egresado)</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 28 }}>
-          <FormField label="DNI — CHAR(8)" required><input style={INP} defaultValue={profile.dni} maxLength={8} /></FormField>
+          <FormField label="DNI — CHAR(8)" required><input name="dni" style={INP} defaultValue={profile.dni} maxLength={8} /></FormField>
           <FormField label="Sexo — CHAR(1)" required hint="M = Masculino, F = Femenino">
-            <select style={INP} defaultValue={profile.sexo}>
+            <select name="sexo" style={INP} defaultValue={profile.sexo}>
               <option value="M">Masculino (M)</option>
               <option value="F">Femenino (F)</option>
             </select>
           </FormField>
-          <FormField label="Nombre egresado (VARCHAR 100)" required><input style={INP} defaultValue={profile.nombre_egresado} /></FormField>
-          <FormField label="Apellidos egresado (VARCHAR 100)" required><input style={INP} defaultValue={profile.apellidos_egresado} /></FormField>
-          <FormField label="Teléfono (VARCHAR 15)"><input style={INP} defaultValue={profile.telefono ?? ""} maxLength={15} /></FormField>
-          <FormField label="Fecha de egreso (DATE)" required><input style={INP} type="date" defaultValue={profile.fecha_egreso} /></FormField>
+          <FormField label="Nombre egresado (VARCHAR 100)" required><input name="nombre_egresado" style={INP} defaultValue={profile.nombre_egresado} /></FormField>
+          <FormField label="Apellidos egresado (VARCHAR 100)" required><input name="apellidos_egresado" style={INP} defaultValue={profile.apellidos_egresado} /></FormField>
+          <FormField label="Teléfono (VARCHAR 15)"><input name="telefono" style={INP} defaultValue={profile.telefono ?? ""} maxLength={15} /></FormField>
+          <FormField label="Fecha de egreso (DATE)" required><input name="fecha_egreso" style={INP} type="date" defaultValue={profile.fecha_egreso} /></FormField>
           <div style={{ gridColumn: "1 / -1" }}>
-            <FormField label="Dirección (VARCHAR 255)"><input style={INP} defaultValue={profile.direccion ?? ""} /></FormField>
+            <FormField label="Dirección (VARCHAR 255)"><input name="direccion" style={INP} defaultValue={profile.direccion ?? ""} /></FormField>
           </div>
         </div>
 
         <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A", marginBottom: 14 }}>Datos Académicos (tabla: carrera → facultad)</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 28 }}>
           <FormField label="Facultad (id_facultad → nombre_facultad)">
-            <select style={INP} defaultValue={profile.nombre_facultad}>{FACULTADES.concat(profile.nombre_facultad).filter((f, i, arr) => arr.indexOf(f) === i).map(f => <option key={f}>{f}</option>)}</select>
+            <select style={INP} defaultValue={profile.nombre_facultad}>{facultades.map(f => <option key={f}>{f}</option>)}</select>
           </FormField>
           <FormField label="Carrera (id_carrera → nombre_carrera)" required>
-            <select style={INP} defaultValue={profile.nombre_carrera}>{(CARRERAS[profile.nombre_facultad] ?? []).concat(profile.nombre_carrera).filter((c, i, arr) => arr.indexOf(c) === i).map(c => <option key={c}>{c}</option>)}</select>
+            <select name="nombre_carrera" style={INP} defaultValue={profile.nombre_carrera}>{carrerasDisponibles.map(c => <option key={`${c.id_carrera}-${c.nombre_carrera}`} value={c.nombre_carrera}>{c.nombre_carrera}</option>)}</select>
           </FormField>
         </div>
 
@@ -1948,13 +2449,14 @@ function MiPerfil() {
           <FormField label="Nombre de usuario (nombre_usuario)" hint="No puede modificarse.">
             <input style={{ ...INP, background: "#F8FAFC", color: "#64748B" }} defaultValue={profile.nombre_usuario} readOnly />
           </FormField>
-          <FormField label="Correo (usuario.correo)" required><input style={INP} type="email" defaultValue={profile.correo} /></FormField>
+          <FormField label="Correo (usuario.correo)" required><input name="correo" style={INP} type="email" defaultValue={profile.correo} /></FormField>
         </div>
 
         <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
-          <button onClick={unavailableCrudAction} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Actualizar Perfil</button>
+          <button type="submit" disabled={saving} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.65 : 1 }}>{saving ? "Actualizando..." : "Actualizar Perfil"}</button>
           <Btn variant="outline" onClick={unavailableCrudAction}>Cancelar</Btn>
         </div>
+        </form>
       </Card>
     </div>
   );
@@ -1966,35 +2468,106 @@ function MiPerfil() {
 //   modalidad VARCHAR(50), actual BOOLEAN, id_egresado FK
 // IMPORTANTE: NO existe campo `descripcion` en historial_laboral.
 function HistorialLaboral() {
+  const { toast, requestConfirmation } = useFeedback();
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<HistorialLaboralItem | null>(null);
   const [actualFlag, setActualFlag] = useState(false);
   const [page, setPage] = useState(1);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [saving, setSaving] = useState(false);
   const fallback = paginatedFallback(HISTORIAL_LABORAL as HistorialLaboralItem[], page);
   const historialPage = usePaginatedApiData(
     true,
     () => egresadoApi.historial({ page, pageSize: DEFAULT_PAGE_SIZE }),
     fallback,
-    [page]
+    [page, refreshKey]
   );
+
+  function openCreateForm() {
+    setEditing(null);
+    setActualFlag(false);
+    setShowForm(true);
+  }
+
+  function openEditForm(item: HistorialLaboralItem) {
+    setEditing(item);
+    setActualFlag(item.actual === true || item.actual === 1);
+    setShowForm(true);
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const payload = {
+      nombre_empresa: String(form.get("nombre_empresa") ?? ""),
+      cargo: String(form.get("cargo") ?? ""),
+      fecha_inicio: String(form.get("fecha_inicio") ?? ""),
+      fecha_fin: actualFlag ? null : String(form.get("fecha_fin") ?? ""),
+      salario: String(form.get("salario") ?? ""),
+      modalidad: String(form.get("modalidad") ?? ""),
+      actual: actualFlag,
+    };
+
+    setSaving(true);
+    try {
+      if (editing) {
+        await egresadoApi.actualizarHistorial(editing.id_historial, payload);
+        toast("success", "Historial laboral actualizado correctamente.");
+      } else {
+        await egresadoApi.crearHistorial(payload);
+        toast("success", "Historial laboral registrado correctamente.");
+      }
+      setShowForm(false);
+      setEditing(null);
+      setActualFlag(false);
+      setRefreshKey(k => k + 1);
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(item: HistorialLaboralItem) {
+    const confirmed = await requestConfirmation({
+      title: "Eliminar historial laboral",
+      message: `¿Deseas eliminar la experiencia en "${item.nombre_empresa}"?`,
+      confirmLabel: "Eliminar",
+      variant: "danger",
+    });
+    if (!confirmed) {
+      toast("info", "Operación cancelada.");
+      return;
+    }
+
+    try {
+      await egresadoApi.eliminarHistorial(item.id_historial);
+      toast("success", "Historial laboral eliminado correctamente.");
+      setRefreshKey(k => k + 1);
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    }
+  }
 
   return (
     <div>
-      <PageHeader title="Historial Laboral" subtitle="Tabla: historial_laboral. Sin campo descripcion. Campo actual = BOOLEAN." action={<Btn onClick={unavailableCrudAction}><Plus size={14} /> Agregar Experiencia</Btn>} />
+      <PageHeader title="Historial Laboral" subtitle="Tabla: historial_laboral. Sin campo descripcion. Campo actual = BOOLEAN." action={<Btn onClick={openCreateForm}><Plus size={14} /> Agregar Experiencia</Btn>} />
 
       {showForm && (
         <Card style={{ padding: 28, marginBottom: 20 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Nueva Experiencia — tabla: historial_laboral</div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>{editing ? "Editar Experiencia" : "Nueva Experiencia"} — tabla: historial_laboral</div>
+          <form onSubmit={handleSubmit}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-            <FormField label="Nombre empresa (VARCHAR 150)" required><input style={INP} placeholder="Ej: Talleres Castellana S.A.D" /></FormField>
-            <FormField label="Cargo (VARCHAR 100)" required><input style={INP} placeholder="Ej: Cloud Engineer" /></FormField>
-            <FormField label="Fecha inicio (DATE)" required><input style={INP} type="date" /></FormField>
+            <FormField label="Nombre empresa (VARCHAR 150)" required><input name="nombre_empresa" style={INP} placeholder="Ej: Talleres Castellana S.A.D" defaultValue={editing?.nombre_empresa ?? ""} /></FormField>
+            <FormField label="Cargo (VARCHAR 100)" required><input name="cargo" style={INP} placeholder="Ej: Cloud Engineer" defaultValue={editing?.cargo ?? ""} /></FormField>
+            <FormField label="Fecha inicio (DATE)" required><input name="fecha_inicio" style={INP} type="date" defaultValue={editing?.fecha_inicio ?? ""} /></FormField>
             <FormField label="Fecha fin (DATE — nullable)" hint={actualFlag ? "NULL cuando actual = TRUE" : "Dejar vacío si aún labora ahí."}>
-              <input style={INP} type="date" disabled={actualFlag} />
+              <input name="fecha_fin" style={INP} type="date" disabled={actualFlag} defaultValue={editing?.fecha_fin ?? ""} />
             </FormField>
             <FormField label="Modalidad (VARCHAR 50)" required>
-              <select style={INP}><option>Presencial</option><option>Remoto</option><option>Híbrido</option></select>
+              <select name="modalidad" style={INP} defaultValue={editing?.modalidad ?? "Presencial"}><option>Presencial</option><option>Remoto</option><option>Híbrido</option></select>
             </FormField>
-            <FormField label="Salario — DECIMAL(10,2) (nullable)"><input style={INP} type="number" step="0.01" placeholder="Ej: 3500.00" /></FormField>
+            <FormField label="Salario — DECIMAL(10,2) (nullable)"><input name="salario" style={INP} type="number" step="0.01" placeholder="Ej: 3500.00" defaultValue={editing?.salario ?? ""} /></FormField>
             <div style={{ gridColumn: "1 / -1" }}>
               <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
                 <input type="checkbox" checked={actualFlag} onChange={e => setActualFlag(e.target.checked)} style={{ width: 16, height: 16 }} />
@@ -2004,9 +2577,10 @@ function HistorialLaboral() {
             </div>
           </div>
           <div style={{ marginTop: 20, display: "flex", gap: 10 }}>
-            <button onClick={unavailableCrudAction} style={{ padding: "10px 22px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Guardar Experiencia</button>
-            <Btn variant="outline" onClick={() => setShowForm(false)}>Cancelar</Btn>
+            <button type="submit" disabled={saving} style={{ padding: "10px 22px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.65 : 1 }}>{saving ? "Guardando..." : "Guardar Experiencia"}</button>
+            <Btn variant="outline" onClick={() => { setShowForm(false); setEditing(null); setActualFlag(false); }}>Cancelar</Btn>
           </div>
+          </form>
         </Card>
       )}
 
@@ -2025,8 +2599,8 @@ function HistorialLaboral() {
                 <TD><Badge label={h.actual ? "TRUE" : "FALSE"} variant={h.actual ? "success" : "neutral"} /></TD>
                 <TD>
                   <div style={{ display: "flex", gap: 2 }}>
-                    <Btn variant="ghost" small onClick={unavailableCrudAction}><Edit2 size={14} /></Btn>
-                    <Btn variant="danger" small onClick={unavailableCrudAction}><Trash2 size={14} /></Btn>
+                    <Btn variant="ghost" small onClick={() => openEditForm(h)}><Edit2 size={14} /></Btn>
+                    <Btn variant="danger" small onClick={() => handleDelete(h)}><Trash2 size={14} /></Btn>
                   </div>
                 </TD>
               </tr>
@@ -2047,10 +2621,43 @@ function HistorialLaboral() {
 //   satisfaccion_profesional: Muy Satisfecho | Satisfecho | Regular | Insatisfecho
 //   tiempo_conseguir_empleo: 1 mes | 3 meses | 6 meses | 1 año
 function EncuestaSeguimiento() {
-  const encuesta = useApiData<EgresadoEncuesta | null>(true, egresadoApi.encuesta, null);
+  const { toast } = useFeedback();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const loadEncuesta = useCallback(() => {
+    void refreshKey;
+    return egresadoApi.encuesta();
+  }, [refreshKey]);
+  const encuesta = useApiData<EgresadoEncuesta | null>(true, loadEncuesta, null);
   const lastSurveyDate = encuesta?.fecha_registro ?? "Sin encuesta";
   const nextSurveyDate = encuesta?.proxima_disponible ?? "Disponible";
   const canSubmit = encuesta == null || encuesta.can_submit === true || encuesta.can_submit === 1;
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+
+    setSaving(true);
+    try {
+      await egresadoApi.crearEncuesta({
+        estado_laboral: String(form.get("estado_laboral") ?? ""),
+        nombre_empresa_actual: String(form.get("nombre_empresa_actual") ?? ""),
+        cargo_actual: String(form.get("cargo_actual") ?? ""),
+        area_trabajo: String(form.get("area_trabajo") ?? ""),
+        sueldo_mensual: String(form.get("sueldo_mensual") ?? ""),
+        tipo_contrato: String(form.get("tipo_contrato") ?? ""),
+        satisfaccion_profesional: String(form.get("satisfaccion_profesional") ?? ""),
+        tiempo_conseguir_empleo: String(form.get("tiempo_conseguir_empleo") ?? ""),
+        observaciones: String(form.get("observaciones") ?? ""),
+      });
+      toast("success", "Encuesta registrada correctamente.");
+      setRefreshKey(k => k + 1);
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div>
@@ -2074,7 +2681,7 @@ function EncuestaSeguimiento() {
             <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
               <Info size={14} color="#64748B" style={{ marginTop: 1, flexShrink: 0 }} />
               <p style={{ fontSize: 12, color: "#64748B", margin: 0, lineHeight: 1.6 }}>
-                Las encuestas de seguimiento laboral se habilitan cada 6 meses para mantener actualizada la información profesional de los egresados.
+                Las encuestas de seguimiento laboral se habilitan según la periodicidad configurada por el administrador.
               </p>
             </div>
           </div>
@@ -2082,6 +2689,7 @@ function EncuestaSeguimiento() {
       </Card>
 
       <Card style={{ padding: 32, maxWidth: 760 }}>
+        <form onSubmit={handleSubmit}>
         <div style={{ background: "#EFF6FF", borderRadius: 10, padding: "14px 18px", marginBottom: 28, display: "flex", gap: 10, alignItems: "flex-start" }}>
           <AlertCircle size={17} color="#2563EB" style={{ marginTop: 1, flexShrink: 0 }} />
           <p style={{ fontSize: 13, color: "#1E40AF", margin: 0, lineHeight: 1.65 }}>
@@ -2093,7 +2701,7 @@ function EncuestaSeguimiento() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>estado_laboral (VARCHAR 50) <span style={{ color: "#EF4444" }}>*</span></label>
-              <select style={INP} defaultValue={encuesta?.estado_laboral ?? "Seleccionar..."}>
+              <select name="estado_laboral" style={INP} defaultValue={encuesta?.estado_laboral ?? "Seleccionar..."}>
                 <option>Seleccionar...</option>
                 <option>Empleado</option>
                 <option>Independiente</option>
@@ -2104,23 +2712,23 @@ function EncuestaSeguimiento() {
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>nombre_empresa_actual (VARCHAR 150)</label>
-              <input style={INP} placeholder="nullable — dejar vacío si desempleado" defaultValue={encuesta?.nombre_empresa_actual ?? ""} />
+              <input name="nombre_empresa_actual" style={INP} placeholder="nullable — dejar vacío si desempleado" defaultValue={encuesta?.nombre_empresa_actual ?? ""} />
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>cargo_actual (VARCHAR 100)</label>
-              <input style={INP} placeholder="nullable" defaultValue={encuesta?.cargo_actual ?? ""} />
+              <input name="cargo_actual" style={INP} placeholder="nullable" defaultValue={encuesta?.cargo_actual ?? ""} />
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>area_trabajo (VARCHAR 100)</label>
-              <input style={INP} placeholder="Ej: Logística, Salud, Tecnología..." defaultValue={encuesta?.area_trabajo ?? ""} />
+              <input name="area_trabajo" style={INP} placeholder="Ej: Logística, Salud, Tecnología..." defaultValue={encuesta?.area_trabajo ?? ""} />
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>sueldo_mensual — DECIMAL(10,2) nullable</label>
-              <input style={INP} type="number" step="0.01" placeholder="Ej: 3500.00" defaultValue={encuesta?.sueldo_mensual ?? ""} />
+              <input name="sueldo_mensual" style={INP} type="number" step="0.01" placeholder="Ej: 3500.00" defaultValue={encuesta?.sueldo_mensual ?? ""} />
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>tipo_contrato (VARCHAR 50)</label>
-              <select style={INP} defaultValue={encuesta?.tipo_contrato ?? "Seleccionar..."}>
+              <select name="tipo_contrato" style={INP} defaultValue={encuesta?.tipo_contrato ?? "Seleccionar..."}>
                 <option>Seleccionar...</option>
                 <option>Indefinido</option>
                 <option>Temporal</option>
@@ -2129,7 +2737,7 @@ function EncuestaSeguimiento() {
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>satisfaccion_profesional (VARCHAR 50)</label>
-              <select style={INP} defaultValue={encuesta?.satisfaccion_profesional ?? "Seleccionar..."}>
+              <select name="satisfaccion_profesional" style={INP} defaultValue={encuesta?.satisfaccion_profesional ?? "Seleccionar..."}>
                 <option>Seleccionar...</option>
                 <option>Muy Satisfecho</option>
                 <option>Satisfecho</option>
@@ -2139,7 +2747,7 @@ function EncuestaSeguimiento() {
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>tiempo_conseguir_empleo (VARCHAR 50)</label>
-              <select style={INP} defaultValue={encuesta?.tiempo_conseguir_empleo ?? "Seleccionar..."}>
+              <select name="tiempo_conseguir_empleo" style={INP} defaultValue={encuesta?.tiempo_conseguir_empleo ?? "Seleccionar..."}>
                 <option>Seleccionar...</option>
                 <option>1 mes</option>
                 <option>3 meses</option>
@@ -2149,19 +2757,20 @@ function EncuestaSeguimiento() {
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>observaciones (TEXT — nullable)</label>
-              <textarea style={{ ...INP, height: 90, resize: "vertical" }} placeholder="observaciones opcionales..." defaultValue={encuesta?.observaciones ?? ""} />
+              <textarea name="observaciones" style={{ ...INP, height: 90, resize: "vertical" }} placeholder="observaciones opcionales..." defaultValue={encuesta?.observaciones ?? ""} />
             </div>
           </div>
         </fieldset>
 
         <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #F1F5F9", display: "flex", gap: 10, alignItems: "center" }}>
-          <Btn disabled={!canSubmit} onClick={unavailableCrudAction}>Enviar Encuesta</Btn>
+          <button type="submit" disabled={!canSubmit || saving} style={{ padding: "9px 18px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: !canSubmit || saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: !canSubmit || saving ? 0.5 : 1 }}>{saving ? "Enviando..." : "Enviar Encuesta"}</button>
           {!canSubmit && (
             <span style={{ fontSize: 12, color: "#94A3B8", display: "flex", alignItems: "center", gap: 5 }}>
               <Clock size={13} /> Disponible a partir del {nextSurveyDate}
             </span>
           )}
         </div>
+        </form>
       </Card>
     </div>
   );
@@ -2169,14 +2778,16 @@ function EncuestaSeguimiento() {
 
 // ─── Notificaciones (todos los roles) ────────────────────────────────────────
 // tabla: notificacion — id_notificacion, id_usuario, titulo, mensaje, leido BOOLEAN, fecha_envio DATETIME
-function Notificaciones({ useApi = false }: { useApi?: boolean }) {
+function Notificaciones({ useApi = false, unreadTotal, onNotificationsChanged }: { useApi?: boolean; unreadTotal?: number; onNotificationsChanged?: () => void }) {
+  const { toast } = useFeedback();
   const [page, setPage] = useState(1);
+  const [refreshKey, setRefreshKey] = useState(0);
   const fallback = paginatedFallback(NOTIFICACIONES_DATA as ApiNotificacion[], page);
   const notifsPage = usePaginatedApiData(
     useApi,
     () => adminApi.notificaciones({ page, pageSize: DEFAULT_PAGE_SIZE }),
     fallback,
-    [useApi, page]
+    [useApi, page, refreshKey]
   );
   const apiNotifs = useApi ? notifsPage.items : fallback.items;
   const [notifs, setNotifs] = useState<ApiNotificacion[]>(apiNotifs);
@@ -2185,22 +2796,46 @@ function Notificaciones({ useApi = false }: { useApi?: boolean }) {
     setNotifs(apiNotifs);
   }, [apiNotifs]);
 
-  function markRead(id: number) {
+  async function markRead(id: number) {
     if (useApi) {
-      unavailableCrudAction();
+      try {
+        await adminApi.marcarNotificacionLeida(id);
+        toast("success", "Notificación marcada como leída.");
+        setRefreshKey(k => k + 1);
+        onNotificationsChanged?.();
+      } catch (error) {
+        toast("error", getErrorMessage(error));
+      }
       return;
     }
 
     setNotifs(prev => prev.map(n => n.id_notificacion === id ? { ...n, leido: true } : n));
   }
-  const unread = notifs.filter(n => !n.leido).length;
+
+  async function markAllRead() {
+    if (useApi) {
+      try {
+        await adminApi.marcarTodasNotificacionesLeidas();
+        toast("success", "Todas las notificaciones fueron marcadas como leídas.");
+        setRefreshKey(k => k + 1);
+        onNotificationsChanged?.();
+      } catch (error) {
+        toast("error", getErrorMessage(error));
+      }
+      return;
+    }
+
+    setNotifs(prev => prev.map(n => ({ ...n, leido: true })));
+  }
+
+  const unread = useApi ? (unreadTotal ?? 0) : notifs.filter(n => !n.leido).length;
 
   return (
     <div>
       <PageHeader
         title="Notificaciones"
         subtitle={`Tabla: notificacion — id_usuario = sesión activa — ${unread} sin leer (leido = FALSE)`}
-        action={<Btn variant="outline" onClick={() => useApi ? unavailableCrudAction() : setNotifs(prev => prev.map(n => ({ ...n, leido: true })))}><CheckCircle size={14} /> Marcar todas leídas</Btn>}
+        action={<Btn variant="outline" onClick={markAllRead}><CheckCircle size={14} /> Marcar todas leídas</Btn>}
       />
       <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 760 }}>
         {notifs.length === 0 && (
@@ -2273,12 +2908,11 @@ const MENUS: Record<Role, MenuItem[]> = {
   ],
 };
 
-function Sidebar({ role, screen, setScreen, onLogout }: { role: Role; screen: Screen; setScreen: (s: Screen) => void; onLogout: () => void }) {
+function Sidebar({ role, screen, setScreen, onLogout, unreadCount }: { role: Role; screen: Screen; setScreen: (s: Screen) => void; onLogout: () => void; unreadCount: number }) {
   const roleLabel: Record<Role, string> = { admin: "Administrador", empresa: "Empresa", egresado: "Egresado" };
   const roleColor: Record<Role, string> = { admin: "#2563EB", empresa: "#10B981", egresado: "#6366F1" };
   const avatars: Record<Role, string> = { admin: "AS", empresa: "FU", egresado: "BP" };
   const userNames: Record<Role, string> = { admin: "admin.general001", empresa: "Finanzas Ugarte S.R.L.", egresado: "bartolomé.vicente85683" };
-  const unreadCount = NOTIFICACIONES_DATA.filter(n => !n.leido).length;
 
   return (
     <div style={{ position: "fixed", top: 0, left: 0, width: 240, height: "100vh", background: "#0A2647", display: "flex", flexDirection: "column", zIndex: 100 }}>
@@ -2342,11 +2976,10 @@ const SCREEN_TITLES: Partial<Record<Screen, string>> = {
   "notificaciones": "Notificaciones",
 };
 
-function TopNav({ role, screen, setScreen }: { role: Role; screen: Screen; setScreen: (s: Screen) => void }) {
+function TopNav({ role, screen, setScreen, unreadCount }: { role: Role; screen: Screen; setScreen: (s: Screen) => void; unreadCount: number }) {
   const userNames: Record<Role, string> = { admin: "admin.general001", empresa: "Finanzas Ugarte S.R.L.", egresado: "Bartolomé Pilar Vicente Abascal" };
   const avatars: Record<Role, string> = { admin: "AS", empresa: "FU", egresado: "BP" };
   const roles: Record<Role, string> = { admin: "Administrador", empresa: "Empresa", egresado: "Egresado" };
-  const unread = NOTIFICACIONES_DATA.filter(n => !n.leido).length;
 
   return (
     <div style={{ position: "fixed", top: 0, left: 240, right: 0, height: 62, background: "#fff", borderBottom: "1px solid #E2E8F0", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 26px", zIndex: 99, boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
@@ -2357,7 +2990,7 @@ function TopNav({ role, screen, setScreen }: { role: Role; screen: Screen; setSc
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <button onClick={() => setScreen("notificaciones")} style={{ position: "relative", width: 36, height: 36, borderRadius: 8, border: "1px solid #E2E8F0", background: "#F8FAFC", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           <Bell size={16} color="#64748B" />
-          {unread > 0 && <span style={{ position: "absolute", top: 6, right: 6, width: 8, height: 8, borderRadius: "50%", background: "#EF4444", border: "2px solid #fff" }} />}
+          {unreadCount > 0 && <span style={{ position: "absolute", top: 6, right: 6, width: 8, height: 8, borderRadius: "50%", background: "#EF4444", border: "2px solid #fff" }} />}
         </button>
         <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: "#2563EB", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 12 }}>{avatars[role]}</div>
@@ -2373,31 +3006,70 @@ function TopNav({ role, screen, setScreen }: { role: Role; screen: Screen; setSc
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function App() {
+  return (
+    <FeedbackProvider>
+      <AppContent />
+    </FeedbackProvider>
+  );
+}
+
+function AppContent() {
+  const { toast } = useFeedback();
   const [session, setSession] = useState<AuthSession | null>(() => readStoredSession());
   const [screen, setScreenState] = useState<Screen>(() => {
     const storedSession = readStoredSession();
-    return storedSession ? HOME_BY_ROLE[storedSession.role] : "admin-dashboard";
+    return storedSession ? readLastScreenForRole(storedSession.role) : "admin-dashboard";
   });
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationsRefreshKey, setNotificationsRefreshKey] = useState(0);
 
   const loggedIn = session != null;
   const role: Role = session?.role ?? "admin";
 
+  useEffect(() => {
+    let active = true;
+
+    if (!session) {
+      setUnreadCount(0);
+      return () => {
+        active = false;
+      };
+    }
+
+    adminApi.notificacionesNoLeidas()
+      .then(({ unread }) => {
+        if (active) setUnreadCount(unread);
+      })
+      .catch(() => {
+        if (active) setUnreadCount(0);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [session?.token, screen, notificationsRefreshKey]);
+
   function setScreen(nextScreen: Screen) {
     if (!session) return;
 
-    setScreenState(canAccessScreen(session.role, nextScreen) ? nextScreen : HOME_BY_ROLE[session.role]);
+    const validScreen = canAccessScreen(session.role, nextScreen) ? nextScreen : HOME_BY_ROLE[session.role];
+    saveLastScreenForRole(session.role, validScreen);
+    setScreenState(validScreen);
   }
 
   function handleLogin(nextSession: AuthSession) {
     saveSession(nextSession);
+    saveLastScreenForRole(nextSession.role, HOME_BY_ROLE[nextSession.role]);
     setSession(nextSession);
     setScreenState(HOME_BY_ROLE[nextSession.role]);
+    toast("success", "Sesión iniciada correctamente.");
   }
 
   function handleLogout() {
     clearSession();
     setSession(null);
     setScreenState("admin-dashboard");
+    toast("info", "Sesión cerrada correctamente.");
   }
 
   if (!loggedIn) return <LoginScreen onLogin={handleLogin} />;
@@ -2422,15 +3094,15 @@ export default function App() {
       case "egr-encuesta": return <EncuestaSeguimiento />;
       case "egr-perfil": return <MiPerfil />;
       case "egr-historial": return <HistorialLaboral />;
-      case "notificaciones": return <Notificaciones useApi={role === "admin" || role === "empresa" || role === "egresado"} />;
+      case "notificaciones": return <Notificaciones useApi={role === "admin" || role === "empresa" || role === "egresado"} unreadTotal={unreadCount} onNotificationsChanged={() => setNotificationsRefreshKey(k => k + 1)} />;
       default: return null;
     }
   }
 
   return (
     <div style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
-      <Sidebar role={role} screen={screen} setScreen={setScreen} onLogout={handleLogout} />
-      <TopNav role={role} screen={screen} setScreen={setScreen} />
+      <Sidebar role={role} screen={screen} setScreen={setScreen} onLogout={handleLogout} unreadCount={unreadCount} />
+      <TopNav role={role} screen={screen} setScreen={setScreen} unreadCount={unreadCount} />
       <main style={{ marginLeft: 240, paddingTop: 62, minHeight: "100vh", background: "#F1F5F9" }}>
         <div style={{ padding: 26 }}>{renderScreen()}</div>
       </main>

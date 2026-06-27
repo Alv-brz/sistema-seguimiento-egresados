@@ -4,11 +4,13 @@ import { getExactFilter, getPagination, getStringFilter } from "../../utils/pagi
 import {
   closeEmpresaOferta,
   createEmpresaOferta,
+  deleteEmpresaOferta,
   getEmpresaDashboard,
   getEmpresaPerfil,
   listEmpresaOfertas,
   listEmpresaPostulaciones,
   updateEmpresaOferta,
+  updateEmpresaOfertaEstado,
   updateEmpresaPerfil,
   updateEmpresaPostulacionEstado,
   type OfertaInput,
@@ -226,6 +228,62 @@ export const empresaController = {
 
     const result = (await closeEmpresaOferta(idEmpresa, idOferta)) as ResultSetHeader;
     if (result.affectedRows === 0) {
+      res.status(404).json({ ok: false, error: "Oferta no encontrada para la empresa autenticada." });
+      return;
+    }
+
+    res.json({ ok: true });
+  }),
+
+  updateOfertaEstado: asyncHandler(async (req: Request, res: Response) => {
+    const idEmpresa = getAuthEmpresaId(res);
+    const idOferta = parsePositiveId(req.params.id);
+    const estado = normalizeRequiredString((req.body as { estado_oferta?: unknown }).estado_oferta) as OfertaInput["estado_oferta"];
+    if (!idEmpresa) {
+      res.status(403).json({ ok: false, reason: "forbidden" });
+      return;
+    }
+    if (!idOferta) {
+      badRequest(res, "id de oferta inválido.");
+      return;
+    }
+    if (!VALID_OFERTA_STATES.has(estado)) {
+      badRequest(res, "estado_oferta debe ser Activa o Cerrada.");
+      return;
+    }
+
+    const result = (await updateEmpresaOfertaEstado(idEmpresa, idOferta, estado)) as ResultSetHeader;
+    if (result.affectedRows === 0) {
+      res.status(404).json({ ok: false, error: "Oferta no encontrada para la empresa autenticada." });
+      return;
+    }
+
+    res.json({ ok: true });
+  }),
+
+  deleteOferta: asyncHandler(async (req: Request, res: Response) => {
+    const idEmpresa = getAuthEmpresaId(res);
+    const idOferta = parsePositiveId(req.params.id);
+    if (!idEmpresa) {
+      res.status(403).json({ ok: false, reason: "forbidden" });
+      return;
+    }
+    if (!idOferta) {
+      badRequest(res, "id de oferta inválido.");
+      return;
+    }
+
+    const result = await deleteEmpresaOferta(idEmpresa, idOferta);
+    if (result.hasPostulaciones) {
+      res.status(409).json({
+        ok: false,
+        error: "No se puede eliminar una oferta con postulaciones asociadas. Puede cerrarla.",
+      });
+      return;
+    }
+
+    const deleteResult = result.result as ResultSetHeader;
+    if (deleteResult.affectedRows === 0) {
       res.status(404).json({ ok: false, error: "Oferta no encontrada para la empresa autenticada." });
       return;
     }

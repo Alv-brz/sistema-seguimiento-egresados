@@ -7,6 +7,21 @@ export type EgresadosFilters = {
   sexo?: string;
 };
 
+export type AdminEgresadoInput = {
+  nombre_usuario: string;
+  password?: string;
+  correo: string;
+  estado_usuario: string;
+  dni: string;
+  nombre_egresado: string;
+  apellidos_egresado: string;
+  telefono: string | null;
+  direccion: string | null;
+  fecha_egreso: string;
+  sexo: "M" | "F";
+  id_carrera: number;
+};
+
 export async function listEgresados(
   pagination: PaginationInput,
   filters: EgresadosFilters
@@ -53,6 +68,8 @@ export async function listEgresados(
        e.direccion,
        e.fecha_egreso,
        e.sexo,
+       c.id_carrera,
+       f.id_facultad,
        c.nombre_carrera,
        c.grado_academico,
        f.nombre_facultad,
@@ -77,4 +94,143 @@ export async function listEgresados(
     page: pagination.page,
     pageSize: pagination.pageSize,
   };
+}
+
+export async function createEgresado(input: AdminEgresadoInput) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [usuarioResult] = await connection.execute(
+      `INSERT INTO usuario(
+         nombre_usuario,
+         password,
+         correo,
+         estado_usuario,
+         fecha_creacion,
+         ultimo_acceso
+       )
+       VALUES (?, ?, ?, ?, NOW(), NULL)`,
+      [input.nombre_usuario, input.password ?? "", input.correo, input.estado_usuario]
+    );
+
+    const idUsuario = (usuarioResult as { insertId: number }).insertId;
+    await connection.execute(
+      `INSERT INTO egresado(
+         id_usuario,
+         dni,
+         nombre_egresado,
+         apellidos_egresado,
+         telefono,
+         direccion,
+         fecha_egreso,
+         sexo,
+         id_carrera
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        idUsuario,
+        input.dni,
+        input.nombre_egresado,
+        input.apellidos_egresado,
+        input.telefono,
+        input.direccion,
+        input.fecha_egreso,
+        input.sexo,
+        input.id_carrera,
+      ]
+    );
+
+    await connection.commit();
+    return { ok: true as const, id_usuario: idUsuario };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function updateEgresado(idUsuario: number, input: AdminEgresadoInput) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [result] = await connection.execute(
+      `UPDATE egresado
+       SET
+         dni = ?,
+         nombre_egresado = ?,
+         apellidos_egresado = ?,
+         telefono = ?,
+         direccion = ?,
+         fecha_egreso = ?,
+         sexo = ?,
+         id_carrera = ?
+       WHERE id_usuario = ?`,
+      [
+        input.dni,
+        input.nombre_egresado,
+        input.apellidos_egresado,
+        input.telefono,
+        input.direccion,
+        input.fecha_egreso,
+        input.sexo,
+        input.id_carrera,
+        idUsuario,
+      ]
+    );
+
+    if ((result as { affectedRows: number }).affectedRows === 0) {
+      await connection.rollback();
+      return result;
+    }
+
+    const passwordSql = input.password ? ", password = ?" : "";
+    const usuarioParams: (string | number)[] = [
+      input.nombre_usuario,
+      input.correo,
+      input.estado_usuario,
+    ];
+    if (input.password) usuarioParams.push(input.password);
+    usuarioParams.push(idUsuario);
+
+    await connection.execute(
+      `UPDATE usuario
+       SET nombre_usuario = ?,
+           correo = ?,
+           estado_usuario = ?
+           ${passwordSql}
+       WHERE id_usuario = ?`,
+      usuarioParams
+    );
+
+    await connection.commit();
+    return result;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function deleteEgresado(idUsuario: number) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [result] = await connection.execute("DELETE FROM egresado WHERE id_usuario = ?", [idUsuario]);
+    if ((result as { affectedRows: number }).affectedRows === 0) {
+      await connection.rollback();
+      return result;
+    }
+    await connection.execute("DELETE FROM usuario WHERE id_usuario = ?", [idUsuario]);
+    await connection.commit();
+    return result;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }

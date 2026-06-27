@@ -12,7 +12,7 @@ El repositorio combina:
 - Backend REST Express/TypeScript en `backend/`.
 - Base de datos MySQL documentada por scripts SQL en `Database/`.
 
-La base de datos es la fuente de verdad del dominio. El frontend conserva algunos datos mock en pantallas no integradas, pero administrador, empresa y egresado ya consumen datos reales en sus flujos principales. El rol Empresa tambien tiene escritura real aprobada para ofertas, postulaciones recibidas y perfil propio.
+La base de datos es la fuente de verdad del dominio. El frontend conserva algunos datos mock en pantallas no integradas, pero administrador, empresa y egresado ya consumen datos reales en sus flujos principales. Los roles Empresa y Egresado tienen escritura real aprobada en sus modulos propios.
 
 ## Tecnologias
 
@@ -25,6 +25,7 @@ Frontend:
 - Componentes base shadcn/ui y Radix UI en `src/app/components/ui/`.
 - Iconos `lucide-react`.
 - Graficos con `recharts`.
+- Toasts con `sonner`, reutilizado mediante `FeedbackProvider` global.
 - Estilos principalmente inline en `src/app/App.tsx`, mas CSS global en `src/styles/`.
 
 Backend:
@@ -59,6 +60,7 @@ Frontend:
 
 - `src/main.tsx`: monta React en `#root`.
 - `src/app/App.tsx`: aplicacion principal, rutas internas por estado, pantallas por rol, UI, datos mock y navegacion.
+- `src/app/App.tsx`: tambien contiene `FeedbackProvider`, sistema global de toasts via Sonner y modal propio de confirmacion.
 - `src/app/auth.ts`: cliente de autenticacion contra el backend y persistencia de sesion en `localStorage`.
 - `src/app/components/ui/`: componentes shadcn/ui/Radix disponibles.
 - `src/app/components/figma/ImageWithFallback.tsx`: helper Figma.
@@ -86,11 +88,21 @@ Base de datos:
 - `Database/Procedimientos Almacenados.sql`: procedimientos CRUD/reportes.
 - `Database/Triggers.sql`: auditoria.
 - `Database/Triggers Signal.sql`: validaciones con `SIGNAL`.
+- `Database/ConfiguracionSistema.sql`: tabla `configuracion_sistema`, insert inicial y triggers de validacion/auditoria.
 - `Database/Modelos_bd.png`: modelo visual.
 
 ## Arquitectura Actual
 
 El frontend es una SPA sin router externo. `App.tsx` mantiene `session` y `screen` en estado React. La pantalla activa se decide con un `switch` sobre un union type `Screen`.
+
+La pantalla activa se persiste por rol en `localStorage` con keys `seg_egresado_bolsa.last_screen.<rol>`. Al refrescar la pagina con una sesion valida guardada, `App.tsx` restaura la ultima pantalla permitida para el rol autenticado; si el valor guardado no pertenece a `ROLE_SCREENS[role]`, vuelve al dashboard definido en `HOME_BY_ROLE`.
+
+La SPA esta envuelta en `FeedbackProvider`, que centraliza mensajes y confirmaciones para todos los roles:
+
+- Toasts reutilizables de exito, error, advertencia e informacion usando `sonner` instalado.
+- Modal propio de confirmacion con botones `Cancelar` y `Confirmar`.
+- Helper `unavailableCrudAction()` muestra toast informativo, no ventanas nativas.
+- No se debe usar `alert()`, `confirm()` ni `prompt()` nativos del navegador.
 
 Roles soportados:
 
@@ -110,12 +122,27 @@ El backend es una API REST modular bajo `/api`:
 - `POST /api/auth/login`: valida usuario/password contra MySQL.
 - `GET /api/auth/me`: valida JWT Bearer y reconstruye la sesion desde MySQL.
 - `GET /api/admin/dashboard`: resumen y graficos del administrador desde MySQL.
+- `GET /api/admin/configuracion`: lee `configuracion_sistema` con `id_configuracion = 1`.
+- `PUT /api/admin/configuracion`: actualiza parametros globales de `configuracion_sistema`.
 - `GET /api/egresados`: listado de lectura para gestion admin de egresados.
+- `POST /api/egresados`: crea usuario + egresado desde administrador.
+- `PUT /api/egresados/:id`: actualiza usuario + egresado desde administrador.
+- `DELETE /api/egresados/:id`: elimina egresado + usuario solo si la integridad referencial lo permite.
 - `GET /api/empresas`: listado de lectura para gestion admin de empresas.
+- `POST /api/empresas`: crea usuario + empresa desde administrador.
+- `PUT /api/empresas/:id`: actualiza usuario + empresa desde administrador.
+- `DELETE /api/empresas/:id`: elimina empresa + usuario solo si la integridad referencial lo permite.
 - `GET /api/ofertas`: listado de lectura para gestion admin de ofertas.
+- `PUT /api/ofertas/:id`: actualiza cualquier oferta desde administrador.
+- `PATCH /api/ofertas/:id/estado`: cambia una oferta entre `Activa` y `Cerrada` desde administrador.
+- `DELETE /api/ofertas/:id`: elimina oferta solo si la integridad referencial lo permite.
 - `GET /api/encuestas`: listado de lectura para gestion admin de encuestas.
+- `DELETE /api/encuestas/:id`: elimina encuesta solo si la integridad referencial lo permite.
 - `GET /api/auditoria`: listado de lectura para auditoria.
 - `GET /api/notificaciones`: notificaciones del usuario autenticado.
+- `GET /api/notificaciones/unread-count`: contador real de notificaciones no leidas del usuario autenticado.
+- `PATCH /api/notificaciones/:id/leida`: marca como leida una notificacion del usuario autenticado.
+- `PATCH /api/notificaciones/leer-todas`: marca como leidas todas las notificaciones del usuario autenticado.
 - `GET /api/empresa/dashboard`: metricas y resumen de la empresa autenticada.
 - `GET /api/empresa/ofertas`: ofertas de la empresa autenticada.
 - `GET /api/empresa/postulaciones`: postulaciones recibidas por ofertas de la empresa autenticada.
@@ -123,6 +150,8 @@ El backend es una API REST modular bajo `/api`:
 - `POST /api/empresa/ofertas`: publica una oferta para la empresa autenticada.
 - `PUT /api/empresa/ofertas/:id`: edita una oferta propia de la empresa autenticada.
 - `PATCH /api/empresa/ofertas/:id/cerrar`: cierra una oferta propia de la empresa autenticada.
+- `PATCH /api/empresa/ofertas/:id/estado`: alterna una oferta propia entre `Activa` y `Cerrada`.
+- `DELETE /api/empresa/ofertas/:id`: elimina una oferta propia solo si no tiene postulaciones asociadas.
 - `PATCH /api/empresa/postulaciones/:id/estado`: cambia estado de una postulacion asociada a oferta propia.
 - `PUT /api/empresa/perfil`: actualiza datos propios de empresa y correo de usuario.
 - `GET /api/egresado/dashboard`: resumen del egresado autenticado.
@@ -131,8 +160,15 @@ El backend es una API REST modular bajo `/api`:
 - `GET /api/egresado/perfil`: datos reales de usuario + egresado + carrera + facultad.
 - `GET /api/egresado/historial`: historial laboral del egresado autenticado.
 - `GET /api/egresado/encuesta`: ultima encuesta asociada al egresado autenticado.
+- `GET /api/egresado/carreras`: catalogo de carreras activas para el perfil del egresado.
+- `POST /api/egresado/postulaciones`: registra postulacion del egresado autenticado a una oferta activa y vigente.
+- `PUT /api/egresado/perfil`: actualiza datos propios de `usuario` y `egresado`.
+- `POST /api/egresado/historial`: crea historial laboral propio.
+- `PUT /api/egresado/historial/:id`: edita historial laboral propio.
+- `DELETE /api/egresado/historial/:id`: elimina historial laboral propio.
+- `POST /api/egresado/encuesta`: registra encuesta de seguimiento y la asocia al egresado autenticado.
 
-Los endpoints de lectura inicial estan implementados para pantallas de administrador, empresa y egresado. El CRUD de Empresa ya esta implementado para publicar/editar/cerrar ofertas, cambiar estado de postulaciones propias y actualizar perfil propio.
+Los endpoints de lectura inicial estan implementados para pantallas de administrador, empresa y egresado. El CRUD de Empresa ya esta cerrado para publicar, editar, cerrar, reactivar y eliminar ofertas propias, cambiar estado de postulaciones propias y actualizar perfil propio. El CRUD de Egresado ya esta cerrado para postulaciones, perfil, historial laboral, encuesta de seguimiento y notificaciones. CRUD Administrador Fase A esta implementado para configuracion global, egresados, empresas, ofertas y eliminacion controlada de encuestas.
 
 ## Flujo Frontend/Backend
 
@@ -140,8 +176,9 @@ Los endpoints de lectura inicial estan implementados para pantallas de administr
 2. `src/app/auth.ts` llama a `POST {VITE_API_URL}/auth/login`.
 3. Si el backend devuelve `{ ok: true, session }`, el frontend guarda la sesion en `localStorage` con key `seg_egresado_bolsa.session`.
 4. `App.tsx` asigna la pantalla inicial segun el rol.
-5. La navegacion se hace con `setScreen`, que valida permisos mediante `canAccessScreen`.
-6. El logout elimina la sesion local y vuelve al login.
+5. Si la pagina se refresca con sesion activa, `App.tsx` restaura la ultima pantalla valida del rol desde `localStorage`; si no es valida, usa el dashboard del rol.
+6. La navegacion se hace con `setScreen`, que valida permisos mediante `canAccessScreen` y guarda la pantalla valida por rol.
+7. El logout elimina la sesion local y vuelve al login.
 
 Valor por defecto de `VITE_API_URL`:
 
@@ -164,6 +201,7 @@ La capa frontend reutilizable esta en `src/app/api.ts`:
 - Expone `adminApi` para dashboard, egresados, empresas, ofertas, encuestas, auditoria y notificaciones.
 - Expone `empresaApi` para dashboard, ofertas, postulaciones, perfil y notificaciones de empresa.
 - Expone `egresadoApi` para dashboard, bolsa laboral, postulaciones, perfil, historial, encuesta y notificaciones de egresado.
+- Expone `notificacionesNoLeidas` para administrador, empresa y egresado mediante `GET /api/notificaciones/unread-count`.
 - Las pantallas admin usan datos reales con fallback a los mocks locales si la API no esta disponible.
 - Las pantallas empresa usan datos reales filtrados por el `id_usuario` del JWT.
 - Las pantallas egresado usan datos reales filtrados por el `id_usuario` del JWT.
@@ -243,6 +281,7 @@ Tablas principales detectadas en `Database/Proyecto BD seguimiento egresado.sql`
 - `auditoria`
 - `notificacion`
 - `recuperacion_password`
+- `configuracion_sistema`
 
 Vistas:
 
@@ -318,23 +357,24 @@ Backend implementado:
 - `health`: verificacion de API y DB.
 - `auth`: login, JWT, middleware de autorizacion y reconstruccion de sesion.
 - `admin-dashboard`: metricas y graficos de lectura para admin.
+- `admin-configuracion`: lectura y actualizacion de `configuracion_sistema`.
 - `egresados`: listado admin de egresados con usuario, carrera y facultad.
 - `empresas`: listado admin de empresas con correo/estado de usuario.
 - `ofertas`: listado admin de ofertas con razon social de empresa.
 - `encuestas`: listado admin de encuestas asociadas a egresados.
 - `auditoria`: lectura de tabla `auditoria`.
-- `notificaciones`: lectura de notificaciones del usuario autenticado.
+- `notificaciones`: lectura de notificaciones y contador real de no leidas del usuario autenticado.
 - `empresa`: dashboard, ofertas propias, postulaciones recibidas y perfil de la empresa autenticada.
-- `egresado`: dashboard, bolsa laboral, postulaciones propias, perfil, historial y ultima encuesta del egresado autenticado.
+- `egresado`: dashboard, bolsa laboral, postulaciones propias, perfil, historial, ultima encuesta y escrituras propias del egresado autenticado.
 - `utils/pagination`: normalizacion de `page`, `pageSize` y filtros de query.
 
 Backend pendiente:
 
-- Modulos REST para postulaciones, historial laboral y reportes especificos no cubiertos por dashboard.
-- Escrituras para Egresado y Administrador, aun no aprobadas.
+- Modulos REST para reportes especificos no cubiertos por dashboard.
+- Escrituras de Administrador Fase B no cubiertas por la Fase A.
 - Reportes especificos fuera de dashboard.
-- Validaciones de entrada formales para modulos pendientes.
-- Manejo de permisos por entidad fuera del CRUD Empresa ya implementado.
+- Validaciones de entrada formales para modulos pendientes fuera de Empresa y Egresado.
+- Manejo de permisos por entidad fuera de los CRUD Empresa y Egresado ya implementados.
 
 ## Convenciones de Codigo
 
@@ -352,6 +392,9 @@ Frontend:
 - En pantallas egresado, nunca usar ids hardcodeados para consultar datos personales; filtrar siempre por `res.locals.auth.id_usuario`.
 - En listados admin, usar paginacion real desde backend para evitar cargar miles de filas.
 - Los botones de acciones aun no implementadas deben mostrar `Función disponible en la fase de CRUD.` y no ejecutar escrituras locales/remotas.
+- Los mensajes al usuario deben usar el sistema global de toasts (`useFeedback().toast` o `notifySystem` en helpers no React).
+- Las confirmaciones deben usar el modal propio global (`useFeedback().requestConfirmation`).
+- No introducir `alert()`, `confirm()` ni `prompt()` nativos; toda captura debe hacerse con formularios, modales o dialogos propios.
 
 Backend:
 
@@ -400,17 +443,30 @@ Base de datos:
 - Roles de aplicacion se resuelven por tablas hijas, no por campo directo en `usuario`.
 - El frontend guarda la sesion en `localStorage`.
 - Las rutas internas del frontend son estado local, no React Router.
+- La ultima pantalla valida se guarda por rol en `localStorage`; no introducir React Router solo para restaurar pantalla al refrescar.
+- La aplicacion usa `FeedbackProvider` en la raiz para mensajes globales y confirmaciones propias; `sonner` se reutiliza para toasts con estilos personalizados del sistema.
 - Los datos de las pantallas siguen mock hasta que se implemente cada modulo REST.
 - Las pantallas de administrador ya consumen datos reales de MySQL para dashboard, egresados, empresas, ofertas, encuestas, auditoria y notificaciones.
 - Los listados admin usan paginacion real con `LIMIT/OFFSET` y filtros server-side.
 - Las pantallas de empresa ya consumen datos reales de MySQL para dashboard, mis ofertas, postulaciones recibidas, perfil y notificaciones.
 - Las consultas de empresa filtran siempre por el `id_usuario` obtenido del JWT, que corresponde a `empresa.id_usuario`.
 - El CRUD de empresa usa SQL directo parametrizado porque los procedimientos existentes no cubren todos los campos del formulario. `sp_cerrar_oferta` existe, pero se usa `UPDATE ... WHERE id_empresa = ?` para detectar `affectedRows` y devolver 404 si la oferta no es propia.
+- La eliminacion de ofertas de empresa valida propiedad por `id_empresa` y bloquea con HTTP 409 si existen postulaciones asociadas; no elimina postulaciones.
+- La pantalla `Mis Ofertas` de empresa edita ofertas con modal/formulario completo, no con `prompt()`, y permite alternar `Activa`/`Cerrada` desde la tabla.
 - Estados permitidos al cambiar postulaciones desde empresa: `Pendiente`, `Aceptado`, `Rechazado`. No usar `En Proceso` para nuevas actualizaciones.
 - Las pantallas de egresado ya consumen datos reales de MySQL para dashboard, bolsa laboral, mis postulaciones, perfil, historial laboral, encuesta y notificaciones.
 - Las consultas personales de egresado filtran siempre por el `id_usuario` obtenido del JWT, que corresponde a `egresado.id_usuario`.
-- Las acciones de editar, eliminar, cerrar oferta, guardar, exportar y marcar notificaciones en admin quedan bloqueadas con aviso hasta la fase CRUD.
-- Los errores SQL `SIGNAL` se traducen a HTTP 422 y duplicados a 409.
+- Las escrituras de egresado usan siempre `res.locals.auth.id_usuario`; el frontend no envia ni decide `id_egresado`.
+- El CRUD de egresado usa SQL directo parametrizado donde los procedimientos existentes no cubren todos los campos visibles. `sp_registrar_postulacion`, `sp_actualizar_egresado`, `sp_registrar_encuesta` y `sp_asociar_encuesta_egresado` se revisaron, pero no cubren todos los campos requeridos por los formularios actuales.
+- La postulacion valida oferta existente, estado `Activa`, fecha de cierre vigente y duplicados antes del `INSERT`.
+- Perfil egresado valida correo, DNI de 8 digitos, sexo `M/F`, fecha de egreso no futura y carrera valida.
+- Historial laboral valida salario no negativo, fechas coherentes y propiedad por `id_egresado`.
+- Encuesta de seguimiento respeta `configuracion_sistema.tiempo_entre_encuestas_meses`; `0` permite responder inmediatamente.
+- Notificaciones permite marcar una o todas como leidas para el usuario autenticado y actualiza el contador real del badge.
+- Las acciones admin cubiertas por Fase A usan escrituras reales; acciones fuera de Fase A, como exportaciones/reportes pendientes, siguen mostrando aviso hasta una fase aprobada.
+- El badge rojo del menu de notificaciones usa el contador real de no leidas y se oculta cuando el contador es 0.
+- Los errores SQL `SIGNAL` se traducen a HTTP 422, duplicados a 409 e integridad referencial a 409.
+- `configuracion_sistema` es singleton con `id_configuracion = 1`; sus validaciones de correo, meses y estado dependen de triggers `SIGNAL`.
 
 ## Protocolo Para Futuras Fases
 

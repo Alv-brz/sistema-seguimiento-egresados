@@ -6,6 +6,20 @@ export type OfertasFilters = {
   modalidad?: string;
 };
 
+export type AdminOfertaInput = {
+  titulo: string;
+  descripcion: string;
+  puesto: string;
+  area: string;
+  ubicacion: string;
+  modalidad: string;
+  tipo_contrato: string;
+  salario: number | null;
+  requisitos: string | null;
+  fecha_cierre: string;
+  estado_oferta: "Activa" | "Cerrada";
+};
+
 export async function listOfertas(
   pagination: PaginationInput,
   filters: OfertasFilters
@@ -48,6 +62,7 @@ export async function listOfertas(
        o.fecha_publicacion,
        o.fecha_cierre,
        o.estado_oferta,
+       o.id_empresa,
        em.razon_social AS empresa
      FROM oferta_laboral o
      INNER JOIN empresa em ON em.id_usuario = o.id_empresa
@@ -63,4 +78,57 @@ export async function listOfertas(
     page: pagination.page,
     pageSize: pagination.pageSize,
   };
+}
+
+export async function updateOferta(idOferta: number, input: AdminOfertaInput) {
+  const [result] = await pool.execute(
+    `UPDATE oferta_laboral
+     SET
+       titulo = ?,
+       descripcion = ?,
+       puesto = ?,
+       area = ?,
+       ubicacion = ?,
+       modalidad = ?,
+       tipo_contrato = ?,
+       salario = ?,
+       requisitos = ?,
+       fecha_cierre = ?,
+       estado_oferta = ?
+     WHERE id_oferta = ?`,
+    [
+      input.titulo,
+      input.descripcion,
+      input.puesto,
+      input.area,
+      input.ubicacion,
+      input.modalidad,
+      input.tipo_contrato,
+      input.salario,
+      input.requisitos,
+      input.fecha_cierre,
+      input.estado_oferta,
+      idOferta,
+    ]
+  );
+
+  return result;
+}
+
+export async function updateOfertaEstado(idOferta: number, estado: "Activa" | "Cerrada") {
+  const [result] = await pool.execute(
+    "UPDATE oferta_laboral SET estado_oferta = ? WHERE id_oferta = ?",
+    [estado, idOferta]
+  );
+
+  return result;
+}
+
+export async function deleteOferta(idOferta: number) {
+  const [result] = await pool.execute(
+    "DELETE FROM oferta_laboral WHERE id_oferta = ?",
+    [idOferta]
+  );
+
+  return result;
 }

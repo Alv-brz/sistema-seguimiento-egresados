@@ -358,6 +358,41 @@ export async function closeEmpresaOferta(idEmpresa: number, idOferta: number) {
   return result;
 }
 
+export async function updateEmpresaOfertaEstado(
+  idEmpresa: number,
+  idOferta: number,
+  estado: OfertaInput["estado_oferta"]
+) {
+  const [result] = await pool.execute(
+    "UPDATE oferta_laboral SET estado_oferta = ? WHERE id_oferta = ? AND id_empresa = ?",
+    [estado, idOferta, idEmpresa]
+  );
+
+  return result;
+}
+
+export async function deleteEmpresaOferta(idEmpresa: number, idOferta: number) {
+  const [postulacionRows] = await pool.execute(
+    `SELECT COUNT(*) AS total
+     FROM postulacion p
+     INNER JOIN oferta_laboral o ON o.id_oferta = p.id_oferta
+     WHERE p.id_oferta = ? AND o.id_empresa = ?`,
+    [idOferta, idEmpresa]
+  );
+
+  const totalPostulaciones = Number((postulacionRows as { total: number }[])[0]?.total ?? 0);
+  if (totalPostulaciones > 0) {
+    return { deleted: false, hasPostulaciones: true };
+  }
+
+  const [result] = await pool.execute(
+    "DELETE FROM oferta_laboral WHERE id_oferta = ? AND id_empresa = ?",
+    [idOferta, idEmpresa]
+  );
+
+  return { deleted: true, hasPostulaciones: false, result };
+}
+
 export async function updateEmpresaPostulacionEstado(
   idEmpresa: number,
   idPostulacion: number,

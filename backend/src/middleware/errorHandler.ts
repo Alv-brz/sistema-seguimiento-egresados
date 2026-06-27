@@ -35,6 +35,13 @@ export function errorHandler(
         error: "Ya existe un registro con esos datos únicos.",
       });
     }
+    // Restricciones de integridad referencial: no eliminar/alterar si hay registros relacionados.
+    if (e.code === "ER_ROW_IS_REFERENCED_2" || e.code === "ER_NO_REFERENCED_ROW_2") {
+      return res.status(409).json({
+        ok: false,
+        error: "La operación no se puede completar porque existen registros relacionados.",
+      });
+    }
   }
 
   console.error("[errorHandler]", err);

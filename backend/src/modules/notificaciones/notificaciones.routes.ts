@@ -11,4 +11,25 @@ router.get(
   notificacionesController.list
 );
 
+router.get(
+  "/unread-count",
+  requireAuth,
+  requireRole("admin", "empresa", "egresado"),
+  notificacionesController.unreadCount
+);
+
+router.patch(
+  "/leer-todas",
+  requireAuth,
+  requireRole("admin", "empresa", "egresado"),
+  notificacionesController.markAllRead
+);
+
+router.patch(
+  "/:id/leida",
+  requireAuth,
+  requireRole("admin", "empresa", "egresado"),
+  notificacionesController.markRead
+);
+
 export default router;

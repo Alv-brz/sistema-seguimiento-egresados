@@ -62,6 +62,8 @@ export type AdminEgresado = {
   direccion: string | null;
   fecha_egreso: string;
   sexo: string;
+  id_carrera?: number;
+  id_facultad?: number;
   nombre_carrera: string;
   grado_academico: string;
   nombre_facultad: string;
@@ -81,6 +83,7 @@ export type AdminEmpresa = {
   direccion: string;
   telefono: string | null;
   pagina_web: string | null;
+  nombre_usuario?: string;
   correo: string;
   estado_usuario: string;
 };
@@ -99,6 +102,7 @@ export type AdminOferta = {
   fecha_publicacion: string;
   fecha_cierre: string;
   estado_oferta: string;
+  id_empresa?: number;
   empresa: string;
 };
 
@@ -126,6 +130,19 @@ export type AdminAuditoria = {
   descripcion: string | null;
   fecha_evento: string;
   usuario_bd: string | null;
+};
+
+export type ConfiguracionSistema = {
+  id_configuracion: number;
+  nombre_universidad: string;
+  correo_institucional: string;
+  telefono: string | null;
+  logo_url: string | null;
+  tiempo_entre_encuestas_meses: number;
+  estado_sistema: string;
+  version_sistema: string;
+  fecha_creacion: string;
+  fecha_actualizacion: string;
 };
 
 export type ApiNotificacion = {
@@ -186,6 +203,14 @@ export type HistorialLaboralItem = {
   salario: number | null;
   modalidad: string;
   actual: boolean | number;
+};
+
+export type CarreraItem = {
+  id_carrera: number;
+  nombre_carrera: string;
+  grado_academico: string;
+  id_facultad: number;
+  nombre_facultad: string;
 };
 
 export type EgresadoEncuesta = {
@@ -267,7 +292,7 @@ export async function apiGet<T>(path: string, params?: Record<string, string | n
 }
 
 export async function apiSend<T>(
-  method: "POST" | "PUT" | "PATCH",
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   body?: unknown
 ): Promise<T> {
@@ -292,11 +317,26 @@ export async function apiSend<T>(
 export const adminApi = {
   dashboard: () => apiGet<AdminDashboardData>("/admin/dashboard"),
   egresados: (params?: ListParams) => apiGet<PaginatedResponse<AdminEgresado>>("/egresados", params),
+  crearEgresado: (body: Record<string, unknown>) => apiSend<{ id_usuario: number }>("POST", "/egresados", body),
+  actualizarEgresado: (id: number, body: Record<string, unknown>) => apiSend<void>("PUT", `/egresados/${id}`, body),
+  eliminarEgresado: (id: number) => apiSend<void>("DELETE", `/egresados/${id}`),
   empresas: (params?: ListParams) => apiGet<PaginatedResponse<AdminEmpresa>>("/empresas", params),
+  crearEmpresa: (body: Record<string, unknown>) => apiSend<{ id_usuario: number }>("POST", "/empresas", body),
+  actualizarEmpresa: (id: number, body: Record<string, unknown>) => apiSend<void>("PUT", `/empresas/${id}`, body),
+  eliminarEmpresa: (id: number) => apiSend<void>("DELETE", `/empresas/${id}`),
   ofertas: (params?: ListParams) => apiGet<PaginatedResponse<AdminOferta>>("/ofertas", params),
+  actualizarOferta: (id: number, body: Partial<AdminOferta>) => apiSend<void>("PUT", `/ofertas/${id}`, body),
+  cambiarEstadoOferta: (id: number, estado_oferta: "Activa" | "Cerrada") => apiSend<void>("PATCH", `/ofertas/${id}/estado`, { estado_oferta }),
+  eliminarOferta: (id: number) => apiSend<void>("DELETE", `/ofertas/${id}`),
   encuestas: (params?: ListParams) => apiGet<PaginatedResponse<AdminEncuesta>>("/encuestas", params),
+  eliminarEncuesta: (id: number) => apiSend<void>("DELETE", `/encuestas/${id}`),
   auditoria: (params?: ListParams) => apiGet<PaginatedResponse<AdminAuditoria>>("/auditoria", params),
+  configuracion: () => apiGet<ConfiguracionSistema>("/admin/configuracion"),
+  actualizarConfiguracion: (body: Partial<ConfiguracionSistema>) => apiSend<ConfiguracionSistema>("PUT", "/admin/configuracion", body),
   notificaciones: (params?: ListParams) => apiGet<PaginatedResponse<ApiNotificacion>>("/notificaciones", params),
+  notificacionesNoLeidas: () => apiGet<{ unread: number }>("/notificaciones/unread-count"),
+  marcarNotificacionLeida: (id: number) => apiSend<void>("PATCH", `/notificaciones/${id}/leida`),
+  marcarTodasNotificacionesLeidas: () => apiSend<void>("PATCH", "/notificaciones/leer-todas"),
 };
 
 export const empresaApi = {
@@ -305,19 +345,34 @@ export const empresaApi = {
   crearOferta: (body: Partial<AdminOferta>) => apiSend<void>("POST", "/empresa/ofertas", body),
   actualizarOferta: (id: number, body: Partial<AdminOferta>) => apiSend<void>("PUT", `/empresa/ofertas/${id}`, body),
   cerrarOferta: (id: number) => apiSend<void>("PATCH", `/empresa/ofertas/${id}/cerrar`),
+  cambiarEstadoOferta: (id: number, estado_oferta: "Activa" | "Cerrada") => apiSend<void>("PATCH", `/empresa/ofertas/${id}/estado`, { estado_oferta }),
+  eliminarOferta: (id: number) => apiSend<void>("DELETE", `/empresa/ofertas/${id}`),
   postulaciones: (params?: ListParams) => apiGet<PaginatedResponse<EmpresaPostulacion>>("/empresa/postulaciones", params),
   cambiarEstadoPostulacion: (id: number, estado: "Pendiente" | "Aceptado" | "Rechazado") => apiSend<void>("PATCH", `/empresa/postulaciones/${id}/estado`, { estado }),
   perfil: () => apiGet<AdminEmpresa | null>("/empresa/perfil"),
   actualizarPerfil: (body: Partial<AdminEmpresa>) => apiSend<void>("PUT", "/empresa/perfil", body),
   notificaciones: (params?: ListParams) => apiGet<PaginatedResponse<ApiNotificacion>>("/notificaciones", params),
+  notificacionesNoLeidas: () => apiGet<{ unread: number }>("/notificaciones/unread-count"),
+  marcarNotificacionLeida: (id: number) => apiSend<void>("PATCH", `/notificaciones/${id}/leida`),
+  marcarTodasNotificacionesLeidas: () => apiSend<void>("PATCH", "/notificaciones/leer-todas"),
 };
 
 export const egresadoApi = {
   dashboard: () => apiGet<EgresadoDashboardData>("/egresado/dashboard"),
   bolsa: (params?: ListParams) => apiGet<PaginatedResponse<AdminOferta>>("/egresado/bolsa", params),
+  carreras: () => apiGet<CarreraItem[]>("/egresado/carreras"),
   postulaciones: (params?: ListParams) => apiGet<PaginatedResponse<EgresadoPostulacion>>("/egresado/postulaciones", params),
+  postular: (id_oferta: number) => apiSend<void>("POST", "/egresado/postulaciones", { id_oferta }),
   perfil: () => apiGet<EgresadoPerfil | null>("/egresado/perfil"),
+  actualizarPerfil: (body: Record<string, unknown>) => apiSend<void>("PUT", "/egresado/perfil", body),
   historial: (params?: ListParams) => apiGet<PaginatedResponse<HistorialLaboralItem>>("/egresado/historial", params),
+  crearHistorial: (body: Record<string, unknown>) => apiSend<void>("POST", "/egresado/historial", body),
+  actualizarHistorial: (id: number, body: Record<string, unknown>) => apiSend<void>("PUT", `/egresado/historial/${id}`, body),
+  eliminarHistorial: (id: number) => apiSend<void>("DELETE", `/egresado/historial/${id}`),
   encuesta: () => apiGet<EgresadoEncuesta | null>("/egresado/encuesta"),
+  crearEncuesta: (body: Record<string, unknown>) => apiSend<void>("POST", "/egresado/encuesta", body),
   notificaciones: (params?: ListParams) => apiGet<PaginatedResponse<ApiNotificacion>>("/notificaciones", params),
+  notificacionesNoLeidas: () => apiGet<{ unread: number }>("/notificaciones/unread-count"),
+  marcarNotificacionLeida: (id: number) => apiSend<void>("PATCH", `/notificaciones/${id}/leida`),
+  marcarTodasNotificacionesLeidas: () => apiSend<void>("PATCH", "/notificaciones/leer-todas"),
 };

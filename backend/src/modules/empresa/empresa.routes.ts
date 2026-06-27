@@ -9,6 +9,8 @@ router.get("/ofertas", requireAuth, requireRole("empresa"), empresaController.of
 router.post("/ofertas", requireAuth, requireRole("empresa"), empresaController.createOferta);
 router.put("/ofertas/:id", requireAuth, requireRole("empresa"), empresaController.updateOferta);
 router.patch("/ofertas/:id/cerrar", requireAuth, requireRole("empresa"), empresaController.closeOferta);
+router.patch("/ofertas/:id/estado", requireAuth, requireRole("empresa"), empresaController.updateOfertaEstado);
+router.delete("/ofertas/:id", requireAuth, requireRole("empresa"), empresaController.deleteOferta);
 router.get("/postulaciones", requireAuth, requireRole("empresa"), empresaController.postulaciones);
 router.patch("/postulaciones/:id/estado", requireAuth, requireRole("empresa"), empresaController.updatePostulacionEstado);
 router.get("/perfil", requireAuth, requireRole("empresa"), empresaController.perfil);
