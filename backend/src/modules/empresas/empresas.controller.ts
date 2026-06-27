@@ -74,6 +74,7 @@ export const empresasController = {
     const data = await listEmpresas(getPagination(_req.query), {
       search: getStringFilter(_req.query.search),
       sector: getExactFilter(_req.query.sector, "Todos"),
+      estado: getExactFilter(_req.query.estado, "Todos"),
     });
     res.json({ ok: true, data });
   }),

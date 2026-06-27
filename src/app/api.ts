@@ -25,6 +25,7 @@ type ListParams = {
   pageSize?: number;
   search?: string;
   facultad?: string;
+  carrera?: string;
   sexo?: string;
   sector?: string;
   estado?: string;
@@ -33,6 +34,7 @@ type ListParams = {
   tabla?: string;
   accion?: string;
   contrato?: string;
+  actual?: string;
 };
 
 export type AdminDashboardData = {

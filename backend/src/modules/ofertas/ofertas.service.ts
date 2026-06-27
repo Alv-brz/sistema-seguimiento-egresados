@@ -2,6 +2,7 @@ import { pool } from "../../config/db.js";
 import type { PaginatedResult, PaginationInput } from "../../utils/pagination.js";
 
 export type OfertasFilters = {
+  search?: string;
   estado?: string;
   modalidad?: string;
 };
@@ -26,6 +27,12 @@ export async function listOfertas(
 ): Promise<PaginatedResult<unknown>> {
   const where: string[] = [];
   const params: unknown[] = [];
+
+  if (filters.search) {
+    where.push("(o.titulo LIKE ? OR o.puesto LIKE ? OR o.area LIKE ? OR o.ubicacion LIKE ? OR em.razon_social LIKE ?)");
+    const q = `%${filters.search}%`;
+    params.push(q, q, q, q, q);
+  }
 
   if (filters.estado) {
     where.push("o.estado_oferta = ?");

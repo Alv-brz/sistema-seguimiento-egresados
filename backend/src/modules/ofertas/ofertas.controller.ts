@@ -8,7 +8,7 @@ import {
   updateOfertaEstado,
   type AdminOfertaInput,
 } from "./ofertas.service.js";
-import { getExactFilter, getPagination } from "../../utils/pagination.js";
+import { getExactFilter, getPagination, getStringFilter } from "../../utils/pagination.js";
 
 const VALID_OFERTA_STATES = new Set(["Activa", "Cerrada"]);
 
@@ -67,6 +67,7 @@ function parseInput(body: Record<string, unknown>, res: Response): AdminOfertaIn
 export const ofertasController = {
   list: asyncHandler(async (_req: Request, res: Response) => {
     const data = await listOfertas(getPagination(_req.query), {
+      search: getStringFilter(_req.query.search),
       estado: getExactFilter(_req.query.estado, "Todos"),
       modalidad: getExactFilter(_req.query.modalidad, "Todos"),
     });

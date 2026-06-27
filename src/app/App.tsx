@@ -115,7 +115,7 @@ const CARRERAS: Record<string, string[]> = {
   "Facultad de Ciencias Sociales": ["Sociología", "Trabajo Social", "Comunicación Social", "Antropología", "Ciencias Políticas"],
 };
 
-// tabla: egresado + usuario (JOIN). Campos reales del INSERT de la BD.
+// Muestra local de egresados para fallback de la UI.
 const EGRESADOS = [
   { id_usuario: 1, dni: "30062065", nombre_egresado: "Bartolomé Pilar", apellidos_egresado: "Vicente Abascal", telefono: "944672125", direccion: "Calle Moreno Hervia 592, Lugo, 33354", fecha_egreso: "2026-03-12", sexo: "M", nombre_carrera: "Auditoría", nombre_facultad: "Facultad de Economía", grado_academico: "Bachiller", nombre_usuario: "bartolomé.vicente85683", correo: "bartolomé.vicente85683@gmail.com", estado_usuario: "Activo", fecha_creacion: "2024-09-15 08:02:48", ultimo_acceso: "2026-02-23 09:02:08" },
   { id_usuario: 2, dni: "20111881", nombre_egresado: "Florencia Lourdes", apellidos_egresado: "Montesinos Borrego", telefono: "922235739", direccion: "Glorieta de Pastora Arnaiz 38, Barcelona, 20904", fecha_egreso: "2024-08-22", sexo: "F", nombre_carrera: "Economía Internacional", nombre_facultad: "Facultad de Economía", grado_academico: "Bachiller", nombre_usuario: "florencia.montesinos46177", correo: "florencia.montesinos46177@hotmail.com", estado_usuario: "Activo", fecha_creacion: "2024-12-11 20:28:04", ultimo_acceso: "2025-04-30 16:32:19" },
@@ -127,8 +127,7 @@ const EGRESADOS = [
   { id_usuario: 8, dni: "40619597", nombre_egresado: "Casemiro Pepe", apellidos_egresado: "Arranz Arnaiz", telefono: "946757780", direccion: "Rambla de Sergio Múgica 28, Ceuta, 19443", fecha_egreso: "2026-03-01", sexo: "F", nombre_carrera: "Ingeniería de Sistemas", nombre_facultad: "Facultad de Ingeniería", grado_academico: "Bachiller", nombre_usuario: "casemiro.arranz71616", correo: "casemiro.arranz71616@hotmail.com", estado_usuario: "Activo", fecha_creacion: "2024-09-19 22:07:45", ultimo_acceso: "2026-04-18 23:03:15" },
 ];
 
-// tabla: empresa + usuario.correo (JOIN). Datos reales del INSERT.
-// NOTA: la tabla empresa NO tiene campo `descripcion`. correo viene de usuario.correo.
+// Muestra local de empresas para fallback de la UI.
 const EMPRESAS = [
   { id_usuario: 25001, ruc: "20041779342", razon_social: "Finanzas Ugarte S.R.L.", nombre_comercial: "Finanzas Ugarte", sector: "Salud", direccion: "Via Tristán Morillo 978, Vizcaya, 23699", telefono: "982461452", pagina_web: "www.finanzasugartes14768.com", correo: "contacto@finanzasugarte.pe", estado_usuario: "Activo" },
   { id_usuario: 25002, ruc: "20480390412", razon_social: "Olivares & Asociados S.Coop. E.I.R.L.", nombre_comercial: "Olivares & Asociados S.Coop.", sector: "Finanzas", direccion: "Calle Dora Jáuregui 49, Huelva, 36889", telefono: "988947553", pagina_web: "www.olivares-asociados.com", correo: "info@olivaresasociados.pe", estado_usuario: "Activo" },
@@ -169,7 +168,7 @@ const HISTORIAL_LABORAL = [
 // estado_laboral: Empleado | Independiente | Desempleado | Estudiando | Emprendedor
 // satisfaccion_profesional: Muy Satisfecho | Satisfecho | Regular | Insatisfecho
 // tiempo_conseguir_empleo: 1 mes | 3 meses | 6 meses | 1 año
-// Egresado y fecha_asociacion vienen de tabla seguimiento_egresado (JOIN)
+// Muestra local de encuestas para fallback de la UI.
 const ENCUESTAS = [
   { id_encuesta: 1, fecha_registro: "2026-04-11", estado_laboral: "Estudiando", nombre_empresa_actual: "Familia Iñiguez S.A.", cargo_actual: "Analista Financiero", area_trabajo: "Logística", sueldo_mensual: 3147.74, tipo_contrato: "Temporal", satisfaccion_profesional: "Muy Satisfecho", tiempo_conseguir_empleo: "3 meses", observaciones: "Cuenta con experiencia en proyectos", egresado: "Bartolomé Pilar Vicente Abascal", fecha_asociacion: "2026-05-10 17:04:11" },
   { id_encuesta: 2, fecha_registro: "2025-11-17", estado_laboral: "Estudiando", nombre_empresa_actual: "Manufacturas Talavera S.A.", cargo_actual: "Diseñador UX/UI", area_trabajo: "Salud", sueldo_mensual: 7995.19, tipo_contrato: "Indefinido", satisfaccion_profesional: "Insatisfecho", tiempo_conseguir_empleo: "1 año", observaciones: "Actualmente trabajando en su área profesional", egresado: "Florencia Lourdes Montesinos Borrego", fecha_asociacion: "2026-05-10 17:04:11" },
@@ -481,6 +480,39 @@ function SearchBar({ value, onChange, placeholder }: { value: string; onChange: 
   );
 }
 
+function EmptyState({ message = "No se encontraron resultados." }: { message?: string }) {
+  return (
+    <tr>
+      <td colSpan={12} style={{ padding: "22px 16px", textAlign: "center", fontSize: 13, color: "#64748B" }}>{message}</td>
+    </tr>
+  );
+}
+
+function humanizeTechnicalText(value: string | number | null | undefined) {
+  if (value == null) return "—";
+  return String(value)
+    .replace(/_/g, " ")
+    .replace(/\bid usuario\b/gi, "usuario")
+    .replace(/\bid egresado\b/gi, "egresado")
+    .replace(/\bid oferta\b/gi, "oferta")
+    .replace(/\bid postulacion\b/gi, "postulación")
+    .replace(/\bid encuesta\b/gi, "encuesta")
+    .replace(/\bestado oferta\b/gi, "estado de oferta")
+    .replace(/\bestado postulacion\b/gi, "estado de postulación")
+    .replace(/\bultimo acceso\b/gi, "último acceso")
+    .replace(/\bTRUE\b/g, "Sí")
+    .replace(/\bFALSE\b/g, "No");
+}
+
+function humanizeAction(value: string | null | undefined) {
+  const actions: Record<string, string> = {
+    INSERT: "Crear",
+    UPDATE: "Actualizar",
+    DELETE: "Eliminar",
+  };
+  return value ? actions[value] ?? value : "—";
+}
+
 function Pagination({ total, showing, page = 1, pageSize = DEFAULT_PAGE_SIZE, onPageChange }: { total: number; showing: number; page?: number; pageSize?: number; onPageChange?: (page: number) => void }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const pages = Array.from(new Set([1, Math.max(1, page - 1), page, Math.min(totalPages, page + 1), totalPages])).filter(p => p >= 1 && p <= totalPages);
@@ -749,13 +781,13 @@ function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
         {view === "login" ? (
           <div style={{ width: "100%", maxWidth: 400 }}>
             <h1 style={{ fontSize: 26, fontWeight: 700, color: "#0F172A", marginBottom: 8 }}>Iniciar Sesión</h1>
-            <p style={{ color: "#64748B", fontSize: 14, marginBottom: 32 }}>Ingresa tu nombre_usuario y password (tabla: usuario).</p>
+            <p style={{ color: "#64748B", fontSize: 14, marginBottom: 32 }}>Ingresa tu usuario y contraseña.</p>
             <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Nombre de usuario (nombre_usuario)</label>
-              <div style={{ position: "relative" }}><User size={16} style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} /><input style={inp} placeholder="nombre_usuario" value={usuario} onChange={e => { setUsuario(e.target.value); setLoginError(""); }} onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }} /></div>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Usuario</label>
+              <div style={{ position: "relative" }}><User size={16} style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} /><input style={inp} placeholder="Usuario" value={usuario} onChange={e => { setUsuario(e.target.value); setLoginError(""); }} onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }} /></div>
             </div>
             <div style={{ marginBottom: 10 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Contraseña (password)</label>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Contraseña</label>
               <div style={{ position: "relative" }}><Lock size={16} style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} /><input style={inp} type="password" placeholder="••••••••" value={password} onChange={e => { setPassword(e.target.value); setLoginError(""); }} onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }} /></div>
             </div>
             {loginError && <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 8, background: "#FEE2E2", color: "#991B1B", fontSize: 12, fontWeight: 500 }}>{loginError}</div>}
@@ -765,21 +797,21 @@ function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
             <button onClick={handleSubmit} style={{ width: "100%", padding: "13px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Iniciar Sesión</button>
           </div>
         ) : (
-          /* Recuperación de contraseña — tabla: recuperacion_password (token, fecha_expiracion) */
+          /* Recuperación de contraseña */
           <div style={{ width: "100%", maxWidth: 420 }}>
             <button onClick={() => { setView("login"); setEnviado(false); setCorreo(""); }} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#64748B", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", marginBottom: 24 }}>← Volver al inicio de sesión</button>
             <div style={{ width: 48, height: 48, borderRadius: 12, background: "#EFF6FF", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}><RefreshCw size={22} color="#2563EB" /></div>
             <h1 style={{ fontSize: 24, fontWeight: 700, color: "#0F172A", marginBottom: 8 }}>Recuperar Contraseña</h1>
-            <p style={{ color: "#64748B", fontSize: 14, marginBottom: 28, lineHeight: 1.6 }}>Ingresa tu correo institucional registrado en la tabla <strong>usuario</strong>. El sistema generará un token en la tabla <strong>recuperacion_password</strong>.</p>
+            <p style={{ color: "#64748B", fontSize: 14, marginBottom: 28, lineHeight: 1.6 }}>Ingresa tu correo institucional registrado. Se generará un enlace de recuperación con vigencia de 24 horas.</p>
             {!enviado ? (
               <>
                 <div style={{ marginBottom: 24 }}>
-                  <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Correo institucional (usuario.correo)</label>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Correo institucional</label>
                   <div style={{ position: "relative" }}><User size={16} style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} /><input style={{ ...inp, paddingLeft: 42 }} type="email" placeholder="correo@udh.edu.pe" value={correo} onChange={e => setCorreo(e.target.value)} /></div>
                 </div>
                 <button onClick={() => setEnviado(true)} style={{ width: "100%", padding: "13px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Enviar enlace de recuperación</button>
                 <div style={{ marginTop: 16, padding: "14px 16px", background: "#F8FAFC", borderRadius: 10, border: "1px solid #E2E8F0", fontSize: 12, color: "#64748B", lineHeight: 1.6 }}>
-                  Se creará un registro en <code>recuperacion_password</code> con: <strong>token</strong> (VARCHAR 255) y <strong>fecha_expiracion</strong> (DATETIME). El enlace expirará en 24 horas.
+                  Se generará un enlace de recuperación con vigencia de 24 horas.
                 </div>
               </>
             ) : (
@@ -859,7 +891,7 @@ function AdminDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
           </ResponsiveContainer>
         </Card>
         <Card style={{ padding: 24 }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Ofertas: estado_oferta Activa vs Cerrada</div>
+          <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Ofertas Activas vs Cerradas</div>
           <ResponsiveContainer width="100%" height={210}>
             <BarChart data={dashboard.charts.ofertasHistorial}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
@@ -892,8 +924,8 @@ function AdminDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
 function AdminEgresados() {
   const { toast, requestConfirmation } = useFeedback();
   const [search, setSearch] = useState("");
-  const [facultadFiltro, setFacultadFiltro] = useState("Todas");
-  const [sexoFiltro, setSexoFiltro] = useState("Todos");
+  const [carreraFiltro, setCarreraFiltro] = useState("Todas");
+  const [estadoFiltro, setEstadoFiltro] = useState("Todos");
   const [selected, setSelected] = useState<AdminEgresado | null>(null);
   const [editing, setEditing] = useState<AdminEgresado | null>(null);
   const [creating, setCreating] = useState(false);
@@ -904,18 +936,18 @@ function AdminEgresados() {
   const fallback = paginatedFallback(EGRESADOS as AdminEgresado[], page);
   const egresadosPage = usePaginatedApiData(
     true,
-    () => adminApi.egresados({ page, pageSize: DEFAULT_PAGE_SIZE, search, facultad: facultadFiltro, sexo: sexoFiltro }),
+    () => adminApi.egresados({ page, pageSize: DEFAULT_PAGE_SIZE, search, carrera: carreraFiltro, estado: estadoFiltro }),
     fallback,
-    [page, search, facultadFiltro, sexoFiltro, refreshKey]
+    [page, search, carreraFiltro, estadoFiltro, refreshKey]
   );
   const egresados = egresadosPage.items;
 
   useEffect(() => {
     setPage(1);
-  }, [search, facultadFiltro, sexoFiltro]);
+  }, [search, carreraFiltro, estadoFiltro]);
 
   const filtered = egresados;
-  const facultades = [...new Set((EGRESADOS as AdminEgresado[]).concat(egresados).map(e => e.nombre_facultad))];
+  const carrerasFiltro = [...new Set(carreras.map(c => c.nombre_carrera).concat((EGRESADOS as AdminEgresado[]).concat(egresados).map(e => e.nombre_carrera)))];
   const formItem = editing;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -985,18 +1017,18 @@ function AdminEgresados() {
         <DetailModal title={formItem ? `Editar Egresado: ${formItem.nombre_egresado}` : "Nuevo Egresado"} onClose={() => { setCreating(false); setEditing(null); }}>
           <form onSubmit={handleSubmit}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-              <FormField label="nombre_usuario" required><input name="nombre_usuario" style={INP} defaultValue={formItem?.nombre_usuario ?? ""} required /></FormField>
-              <FormField label={formItem ? "password (opcional)" : "password"} required={!formItem}><input name="password" style={INP} type="password" required={!formItem} /></FormField>
-              <FormField label="correo" required><input name="correo" type="email" style={INP} defaultValue={formItem?.correo ?? ""} required /></FormField>
-              <FormField label="estado_usuario" required><select name="estado_usuario" style={INP} defaultValue={formItem?.estado_usuario ?? "Activo"}><option>Activo</option><option>Inactivo</option></select></FormField>
-              <FormField label="dni" required><input name="dni" style={INP} defaultValue={formItem?.dni ?? ""} maxLength={8} required /></FormField>
-              <FormField label="sexo" required><select name="sexo" style={INP} defaultValue={formItem?.sexo ?? "M"}><option value="M">Masculino (M)</option><option value="F">Femenino (F)</option></select></FormField>
-              <FormField label="nombre_egresado" required><input name="nombre_egresado" style={INP} defaultValue={formItem?.nombre_egresado ?? ""} required /></FormField>
-              <FormField label="apellidos_egresado" required><input name="apellidos_egresado" style={INP} defaultValue={formItem?.apellidos_egresado ?? ""} required /></FormField>
-              <FormField label="telefono"><input name="telefono" style={INP} defaultValue={formItem?.telefono ?? ""} /></FormField>
-              <FormField label="fecha_egreso" required><input name="fecha_egreso" type="date" style={INP} defaultValue={toDateInputValue(formItem?.fecha_egreso)} required /></FormField>
+              <FormField label="Usuario" required><input name="nombre_usuario" style={INP} defaultValue={formItem?.nombre_usuario ?? ""} required /></FormField>
+              <FormField label={formItem ? "Contraseña (opcional)" : "Contraseña"} required={!formItem}><input name="password" style={INP} type="password" required={!formItem} /></FormField>
+              <FormField label="Correo" required><input name="correo" type="email" style={INP} defaultValue={formItem?.correo ?? ""} required /></FormField>
+              <FormField label="Estado" required><select name="estado_usuario" style={INP} defaultValue={formItem?.estado_usuario ?? "Activo"}><option>Activo</option><option>Inactivo</option></select></FormField>
+              <FormField label="DNI" required hint="8 dígitos."><input name="dni" style={INP} defaultValue={formItem?.dni ?? ""} maxLength={8} required /></FormField>
+              <FormField label="Sexo" required><select name="sexo" style={INP} defaultValue={formItem?.sexo ?? "M"}><option value="M">Masculino (M)</option><option value="F">Femenino (F)</option></select></FormField>
+              <FormField label="Nombres" required><input name="nombre_egresado" style={INP} defaultValue={formItem?.nombre_egresado ?? ""} required /></FormField>
+              <FormField label="Apellidos" required><input name="apellidos_egresado" style={INP} defaultValue={formItem?.apellidos_egresado ?? ""} required /></FormField>
+              <FormField label="Teléfono"><input name="telefono" style={INP} defaultValue={formItem?.telefono ?? ""} /></FormField>
+              <FormField label="Fecha de egreso" required><input name="fecha_egreso" type="date" style={INP} defaultValue={toDateInputValue(formItem?.fecha_egreso)} required /></FormField>
               <div style={{ gridColumn: "1 / -1" }}>
-                <FormField label="id_carrera" required>
+                <FormField label="Carrera" required>
                   <select name="id_carrera" style={INP} defaultValue={formItem?.id_carrera ?? ""} required>
                     <option value="">Seleccionar...</option>
                     {carreras.map(c => <option key={c.id_carrera} value={c.id_carrera}>{c.nombre_carrera} - {c.nombre_facultad}</option>)}
@@ -1004,7 +1036,7 @@ function AdminEgresados() {
                 </FormField>
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
-                <FormField label="direccion"><input name="direccion" style={INP} defaultValue={formItem?.direccion ?? ""} /></FormField>
+                <FormField label="Dirección"><input name="direccion" style={INP} defaultValue={formItem?.direccion ?? ""} /></FormField>
               </div>
             </div>
             <div style={{ marginTop: 24, display: "flex", gap: 10 }}>
@@ -1016,48 +1048,48 @@ function AdminEgresados() {
       )}
       {selected && (
         <DetailModal title={`Detalle Egresado: ${selected.nombre_egresado} ${selected.apellidos_egresado}`} onClose={() => setSelected(null)}>
-          <DetailSection title="tabla: usuario (datos de acceso)">
-            <DR label="id_usuario" value={selected.id_usuario} />
-            <DR label="nombre_usuario" value={selected.nombre_usuario} />
-            <DR label="correo" value={selected.correo} full />
-            <DR label="estado_usuario" value={selected.estado_usuario} />
-            <DR label="fecha_creacion" value={selected.fecha_creacion} />
-            <DR label="ultimo_acceso" value={selected.ultimo_acceso} />
+          <DetailSection title="Datos de acceso">
+            <DR label="Usuario" value={selected.nombre_usuario} />
+            <DR label="Correo" value={selected.correo} full />
+            <DR label="Estado" value={selected.estado_usuario} />
+            <DR label="Fecha de creación" value={selected.fecha_creacion} />
+            <DR label="Último acceso" value={selected.ultimo_acceso} />
           </DetailSection>
-          <DetailSection title="tabla: egresado (datos personales)">
-            <DR label="dni (CHAR 8)" value={selected.dni} />
-            <DR label="sexo (CHAR 1)" value={selected.sexo === "M" ? "Masculino (M)" : "Femenino (F)"} />
-            <DR label="nombre_egresado" value={selected.nombre_egresado} />
-            <DR label="apellidos_egresado" value={selected.apellidos_egresado} />
-            <DR label="telefono" value={selected.telefono} />
-            <DR label="fecha_egreso" value={selected.fecha_egreso} />
-            <DR label="direccion" value={selected.direccion} full />
+          <DetailSection title="Datos personales">
+            <DR label="DNI" value={selected.dni} />
+            <DR label="Sexo" value={selected.sexo === "M" ? "Masculino" : "Femenino"} />
+            <DR label="Nombres" value={selected.nombre_egresado} />
+            <DR label="Apellidos" value={selected.apellidos_egresado} />
+            <DR label="Teléfono" value={selected.telefono} />
+            <DR label="Fecha de egreso" value={selected.fecha_egreso} />
+            <DR label="Dirección" value={selected.direccion} full />
           </DetailSection>
-          <DetailSection title="tabla: carrera + facultad (datos académicos)">
-            <DR label="nombre_carrera" value={selected.nombre_carrera} />
-            <DR label="grado_academico" value={selected.grado_academico} />
-            <DR label="nombre_facultad" value={selected.nombre_facultad} />
+          <DetailSection title="Datos académicos">
+            <DR label="Carrera" value={selected.nombre_carrera} />
+            <DR label="Grado académico" value={selected.grado_academico} />
+            <DR label="Facultad" value={selected.nombre_facultad} />
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Gestión de Egresados" subtitle={`${egresadosPage.total} registros en tabla egresado`} action={<Btn onClick={() => setCreating(true)}><Plus size={14} /> Nuevo Egresado</Btn>} />
+      <PageHeader title="Gestión de Egresados" subtitle={`${egresadosPage.total} egresados registrados`} action={<Btn onClick={() => setCreating(true)}><Plus size={14} /> Nuevo Egresado</Btn>} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10, alignItems: "center" }}>
-          <SearchBar value={search} onChange={setSearch} placeholder="Buscar por dni, nombre_egresado, apellidos_egresado..." />
-          <select value={facultadFiltro} onChange={e => setFacultadFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
+          <SearchBar value={search} onChange={setSearch} placeholder="Buscar por DNI, nombre, carrera o correo..." />
+          <select value={carreraFiltro} onChange={e => setCarreraFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
             <option>Todas</option>
-            {facultades.map(f => <option key={f}>{f}</option>)}
+            {carrerasFiltro.map(c => <option key={c}>{c}</option>)}
           </select>
-          <select value={sexoFiltro} onChange={e => setSexoFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
+          <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
             <option>Todos</option>
-            <option value="M">Masculino (M)</option>
-            <option value="F">Femenino (F)</option>
+            <option>Activo</option>
+            <option>Inactivo</option>
           </select>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr><TH label="DNI" /><TH label="nombre_egresado" /><TH label="apellidos_egresado" /><TH label="nombre_carrera" /><TH label="nombre_facultad" /><TH label="telefono" /><TH label="fecha_egreso" /><TH label="sexo" /><TH label="Acciones" /></tr></thead>
+            <thead><tr><TH label="DNI" /><TH label="Nombres" /><TH label="Apellidos" /><TH label="Carrera" /><TH label="Facultad" /><TH label="Teléfono" /><TH label="Fecha de egreso" /><TH label="Sexo" /><TH label="Acciones" /></tr></thead>
             <tbody>
+              {filtered.length === 0 && <EmptyState />}
               {filtered.map((e, i) => (
                 <tr key={i}>
                   <TD mono>{e.dni}</TD>
@@ -1092,6 +1124,7 @@ function AdminEmpresas() {
   const { toast, requestConfirmation } = useFeedback();
   const [search, setSearch] = useState("");
   const [sectorFiltro, setSectorFiltro] = useState("Todos");
+  const [estadoFiltro, setEstadoFiltro] = useState("Todos");
   const [selected, setSelected] = useState<AdminEmpresa | null>(null);
   const [editing, setEditing] = useState<AdminEmpresa | null>(null);
   const [creating, setCreating] = useState(false);
@@ -1101,16 +1134,16 @@ function AdminEmpresas() {
   const fallback = paginatedFallback(EMPRESAS as AdminEmpresa[], page);
   const empresasPage = usePaginatedApiData(
     true,
-    () => adminApi.empresas({ page, pageSize: DEFAULT_PAGE_SIZE, search, sector: sectorFiltro }),
+    () => adminApi.empresas({ page, pageSize: DEFAULT_PAGE_SIZE, search, sector: sectorFiltro, estado: estadoFiltro }),
     fallback,
-    [page, search, sectorFiltro, refreshKey]
+    [page, search, sectorFiltro, estadoFiltro, refreshKey]
   );
   const filtered = empresasPage.items;
   const sectores = [...new Set((EMPRESAS as AdminEmpresa[]).concat(filtered).map(e => e.sector))];
 
   useEffect(() => {
     setPage(1);
-  }, [search, sectorFiltro]);
+  }, [search, sectorFiltro, estadoFiltro]);
   const formItem = editing;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -1180,18 +1213,18 @@ function AdminEmpresas() {
         <DetailModal title={formItem ? `Editar Empresa: ${formItem.razon_social}` : "Nueva Empresa"} onClose={() => { setCreating(false); setEditing(null); }}>
           <form onSubmit={handleSubmit}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-              <FormField label="nombre_usuario" required><input name="nombre_usuario" style={INP} defaultValue={formItem?.nombre_usuario ?? ""} required /></FormField>
-              <FormField label={formItem ? "password (opcional)" : "password"} required={!formItem}><input name="password" style={INP} type="password" required={!formItem} /></FormField>
-              <FormField label="correo" required><input name="correo" type="email" style={INP} defaultValue={formItem?.correo ?? ""} required /></FormField>
-              <FormField label="estado_usuario" required><select name="estado_usuario" style={INP} defaultValue={formItem?.estado_usuario ?? "Activo"}><option>Activo</option><option>Inactivo</option></select></FormField>
-              <FormField label="ruc" required><input name="ruc" style={INP} defaultValue={formItem?.ruc ?? ""} maxLength={11} required /></FormField>
-              <FormField label="razon_social" required><input name="razon_social" style={INP} defaultValue={formItem?.razon_social ?? ""} required /></FormField>
-              <FormField label="nombre_comercial"><input name="nombre_comercial" style={INP} defaultValue={formItem?.nombre_comercial ?? ""} /></FormField>
-              <FormField label="sector" required><input name="sector" style={INP} defaultValue={formItem?.sector ?? ""} required /></FormField>
-              <FormField label="telefono"><input name="telefono" style={INP} defaultValue={formItem?.telefono ?? ""} /></FormField>
-              <FormField label="pagina_web"><input name="pagina_web" style={INP} defaultValue={formItem?.pagina_web ?? ""} placeholder="www.ejemplo.com" /></FormField>
+              <FormField label="Usuario" required><input name="nombre_usuario" style={INP} defaultValue={formItem?.nombre_usuario ?? ""} required /></FormField>
+              <FormField label={formItem ? "Contraseña (opcional)" : "Contraseña"} required={!formItem}><input name="password" style={INP} type="password" required={!formItem} /></FormField>
+              <FormField label="Correo" required><input name="correo" type="email" style={INP} defaultValue={formItem?.correo ?? ""} required /></FormField>
+              <FormField label="Estado" required><select name="estado_usuario" style={INP} defaultValue={formItem?.estado_usuario ?? "Activo"}><option>Activo</option><option>Inactivo</option></select></FormField>
+              <FormField label="RUC" required hint="11 dígitos."><input name="ruc" style={INP} defaultValue={formItem?.ruc ?? ""} maxLength={11} required /></FormField>
+              <FormField label="Razón social" required><input name="razon_social" style={INP} defaultValue={formItem?.razon_social ?? ""} required /></FormField>
+              <FormField label="Nombre comercial"><input name="nombre_comercial" style={INP} defaultValue={formItem?.nombre_comercial ?? ""} /></FormField>
+              <FormField label="Sector" required><input name="sector" style={INP} defaultValue={formItem?.sector ?? ""} required /></FormField>
+              <FormField label="Teléfono"><input name="telefono" style={INP} defaultValue={formItem?.telefono ?? ""} /></FormField>
+              <FormField label="Página web"><input name="pagina_web" style={INP} defaultValue={formItem?.pagina_web ?? ""} placeholder="www.ejemplo.com" /></FormField>
               <div style={{ gridColumn: "1 / -1" }}>
-                <FormField label="direccion" required><input name="direccion" style={INP} defaultValue={formItem?.direccion ?? ""} required /></FormField>
+                <FormField label="Dirección" required><input name="direccion" style={INP} defaultValue={formItem?.direccion ?? ""} required /></FormField>
               </div>
             </div>
             <div style={{ marginTop: 24, display: "flex", gap: 10 }}>
@@ -1203,34 +1236,37 @@ function AdminEmpresas() {
       )}
       {selected && (
         <DetailModal title={`Detalle Empresa: ${selected.razon_social}`} onClose={() => setSelected(null)}>
-          <DetailSection title="tabla: usuario (datos de acceso)">
-            <DR label="id_usuario" value={selected.id_usuario} />
-            <DR label="correo (usuario.correo)" value={selected.correo} full />
-            <DR label="estado_usuario" value={selected.estado_usuario} />
+          <DetailSection title="Datos de acceso">
+            <DR label="Correo" value={selected.correo} full />
+            <DR label="Estado" value={selected.estado_usuario} />
           </DetailSection>
-          <DetailSection title="tabla: empresa (datos de la empresa)">
-            <DR label="ruc (CHAR 11)" value={selected.ruc} />
-            <DR label="razon_social" value={selected.razon_social} />
-            <DR label="nombre_comercial" value={selected.nombre_comercial} />
-            <DR label="sector" value={selected.sector} />
-            <DR label="telefono" value={selected.telefono} />
-            <DR label="pagina_web" value={selected.pagina_web} />
-            <DR label="direccion" value={selected.direccion} full />
+          <DetailSection title="Datos de la empresa">
+            <DR label="RUC" value={selected.ruc} />
+            <DR label="Razón social" value={selected.razon_social} />
+            <DR label="Nombre comercial" value={selected.nombre_comercial} />
+            <DR label="Sector" value={selected.sector} />
+            <DR label="Teléfono" value={selected.telefono} />
+            <DR label="Página web" value={selected.pagina_web} />
+            <DR label="Dirección" value={selected.direccion} full />
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Gestión de Empresas" subtitle={`${empresasPage.total} registros en tabla empresa`} action={<Btn onClick={() => setCreating(true)}><Plus size={14} /> Nueva Empresa</Btn>} />
+      <PageHeader title="Gestión de Empresas" subtitle={`${empresasPage.total} empresas registradas`} action={<Btn onClick={() => setCreating(true)}><Plus size={14} /> Nueva Empresa</Btn>} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
-          <SearchBar value={search} onChange={setSearch} placeholder="Buscar por razon_social, ruc, sector..." />
+          <SearchBar value={search} onChange={setSearch} placeholder="Buscar por razón social, RUC, sector o correo..." />
           <select value={sectorFiltro} onChange={e => setSectorFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
             <option>Todos</option>
             {sectores.map(s => <option key={s}>{s}</option>)}
           </select>
+          <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
+            <option>Todos</option><option>Activo</option><option>Inactivo</option>
+          </select>
         </div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr><TH label="RUC" /><TH label="razon_social" /><TH label="nombre_comercial" /><TH label="sector" /><TH label="telefono" /><TH label="pagina_web" /><TH label="estado_usuario" /><TH label="Acciones" /></tr></thead>
+          <thead><tr><TH label="RUC" /><TH label="Razón social" /><TH label="Nombre comercial" /><TH label="Sector" /><TH label="Teléfono" /><TH label="Página web" /><TH label="Estado" /><TH label="Acciones" /></tr></thead>
           <tbody>
+            {filtered.length === 0 && <EmptyState />}
             {filtered.map((e, i) => (
               <tr key={i}>
                 <TD mono>{e.ruc}</TD>
@@ -1264,24 +1300,28 @@ function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScree
   const [selected, setSelected] = useState<AdminOferta | null>(null);
   const [editing, setEditing] = useState<AdminOferta | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
   const [modalidadFiltro, setModalidadFiltro] = useState("Todos");
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
-  const localOfertas = (OFERTAS as AdminOferta[]).filter(o => (estadoFiltro === "Todos" || o.estado_oferta === estadoFiltro) && (modalidadFiltro === "Todos" || o.modalidad === modalidadFiltro));
+  const localOfertas = (OFERTAS as AdminOferta[]).filter(o => {
+    const q = search.toLowerCase();
+    return `${o.titulo} ${o.puesto} ${o.area} ${o.ubicacion} ${o.empresa}`.toLowerCase().includes(q) && (estadoFiltro === "Todos" || o.estado_oferta === estadoFiltro) && (modalidadFiltro === "Todos" || o.modalidad === modalidadFiltro);
+  });
   const fallback = paginatedFallback(localOfertas, page);
   const remotePage = usePaginatedApiData(
     true,
-    () => (useApi ? adminApi.ofertas : empresaApi.ofertas)({ page, pageSize: DEFAULT_PAGE_SIZE, estado: estadoFiltro, modalidad: modalidadFiltro }),
+    () => (useApi ? adminApi.ofertas : empresaApi.ofertas)({ page, pageSize: DEFAULT_PAGE_SIZE, search, estado: estadoFiltro, modalidad: modalidadFiltro }),
     fallback,
-    [useApi, page, estadoFiltro, modalidadFiltro, refreshKey]
+    [useApi, page, search, estadoFiltro, modalidadFiltro, refreshKey]
   );
   const ofertasPage = remotePage;
   const filtered = ofertasPage.items;
 
   useEffect(() => {
     setPage(1);
-  }, [estadoFiltro, modalidadFiltro]);
+  }, [search, estadoFiltro, modalidadFiltro]);
 
   function handleEditOferta(oferta: AdminOferta) {
     setEditing(oferta);
@@ -1372,30 +1412,30 @@ function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScree
           <form onSubmit={handleEditSubmit}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
               <div style={{ gridColumn: "1 / -1" }}>
-                <FormField label="Título (VARCHAR 150)" required><input name="titulo" style={INP} defaultValue={editing.titulo} required /></FormField>
+                <FormField label="Título" required hint="Máximo 150 caracteres."><input name="titulo" style={INP} defaultValue={editing.titulo} maxLength={150} required /></FormField>
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
-                <FormField label="Descripción (TEXT)" required><textarea name="descripcion" style={{ ...INP, height: 100, resize: "vertical" }} defaultValue={editing.descripcion} required /></FormField>
+                <FormField label="Descripción" required><textarea name="descripcion" style={{ ...INP, height: 100, resize: "vertical" }} defaultValue={editing.descripcion} required /></FormField>
               </div>
-              <FormField label="Puesto (VARCHAR 100)" required><input name="puesto" style={INP} defaultValue={editing.puesto} required /></FormField>
-              <FormField label="Área (VARCHAR 100)" required><input name="area" style={INP} defaultValue={editing.area} required /></FormField>
-              <FormField label="Ubicación (VARCHAR 150)" required><input name="ubicacion" style={INP} defaultValue={editing.ubicacion} required /></FormField>
-              <FormField label="Modalidad (VARCHAR 50)" required>
+              <FormField label="Puesto" required><input name="puesto" style={INP} defaultValue={editing.puesto} required /></FormField>
+              <FormField label="Área" required><input name="area" style={INP} defaultValue={editing.area} required /></FormField>
+              <FormField label="Ubicación" required><input name="ubicacion" style={INP} defaultValue={editing.ubicacion} required /></FormField>
+              <FormField label="Modalidad" required>
                 <select name="modalidad" style={INP} defaultValue={editing.modalidad} required>
                   <option>Presencial</option><option>Remoto</option><option>Híbrido</option>
                 </select>
               </FormField>
-              <FormField label="Tipo de contrato (VARCHAR 50)" required>
+              <FormField label="Tipo de contrato" required>
                 <select name="tipo_contrato" style={INP} defaultValue={editing.tipo_contrato} required>
                   <option>Indefinido</option><option>Temporal</option><option>Practicante</option>
                 </select>
               </FormField>
-              <FormField label="Salario — DECIMAL(10,2)" hint="Campo nullable. Dejar vacío si no se desea publicar."><input name="salario" style={INP} type="number" step="0.01" defaultValue={editing.salario ?? ""} /></FormField>
+              <FormField label="Salario" hint="Campo opcional. Dejar vacío si no se desea publicar."><input name="salario" style={INP} type="number" step="0.01" defaultValue={editing.salario ?? ""} /></FormField>
               <div style={{ gridColumn: "1 / -1" }}>
-                <FormField label="Requisitos (TEXT)" hint="Campo nullable."><textarea name="requisitos" style={{ ...INP, height: 80, resize: "vertical" }} defaultValue={editing.requisitos ?? ""} /></FormField>
+                <FormField label="Requisitos" hint="Campo opcional."><textarea name="requisitos" style={{ ...INP, height: 80, resize: "vertical" }} defaultValue={editing.requisitos ?? ""} /></FormField>
               </div>
-              <FormField label="Fecha cierre (DATE)" required><input name="fecha_cierre" style={INP} type="date" defaultValue={toDateInputValue(editing.fecha_cierre)} required /></FormField>
-              <FormField label="Estado oferta (VARCHAR 20)" required>
+              <FormField label="Fecha de cierre" required><input name="fecha_cierre" style={INP} type="date" defaultValue={toDateInputValue(editing.fecha_cierre)} required /></FormField>
+              <FormField label="Estado" required>
                 <select name="estado_oferta" style={INP} defaultValue={editing.estado_oferta} required>
                   <option>Activa</option><option>Cerrada</option>
                 </select>
@@ -1410,27 +1450,27 @@ function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScree
       )}
       {selected && (
         <DetailModal title={`Detalle Oferta: ${selected.titulo}`} onClose={() => setSelected(null)}>
-          <DetailSection title="tabla: oferta_laboral">
-            <DR label="id_oferta" value={selected.id_oferta} />
-            <DR label="titulo" value={selected.titulo} />
-            <DR label="puesto" value={selected.puesto} />
-            <DR label="area" value={selected.area} />
-            <DR label="ubicacion" value={selected.ubicacion} />
-            <DR label="modalidad" value={selected.modalidad} />
-            <DR label="tipo_contrato" value={selected.tipo_contrato} />
-            <DR label="salario DECIMAL(10,2)" value={selected.salario != null ? `S/. ${selected.salario.toLocaleString()}` : "—"} />
-            <DR label="fecha_publicacion" value={selected.fecha_publicacion} />
-            <DR label="fecha_cierre" value={selected.fecha_cierre} />
-            <DR label="estado_oferta" value={selected.estado_oferta} />
-            <DR label="id_empresa (empresa.razon_social)" value={selected.empresa} />
-            <DR label="descripcion" value={selected.descripcion} full />
-            <DR label="requisitos" value={selected.requisitos} full />
+          <DetailSection title="Datos de la oferta">
+            <DR label="Título" value={selected.titulo} />
+            <DR label="Puesto" value={selected.puesto} />
+            <DR label="Área" value={selected.area} />
+            <DR label="Ubicación" value={selected.ubicacion} />
+            <DR label="Modalidad" value={selected.modalidad} />
+            <DR label="Tipo de contrato" value={selected.tipo_contrato} />
+            <DR label="Salario" value={selected.salario != null ? `S/. ${selected.salario.toLocaleString()}` : "—"} />
+            <DR label="Fecha de publicación" value={selected.fecha_publicacion} />
+            <DR label="Fecha de cierre" value={selected.fecha_cierre} />
+            <DR label="Estado" value={selected.estado_oferta} />
+            <DR label="Empresa" value={selected.empresa} />
+            <DR label="Descripción" value={selected.descripcion} full />
+            <DR label="Requisitos" value={selected.requisitos} full />
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Gestión de Ofertas Laborales" subtitle={`${ofertasPage.total} registros en tabla oferta_laboral`} action={<Btn onClick={() => useApi ? unavailableCrudAction() : setScreen?.("emp-crear-oferta")}><Plus size={14} /> Crear Oferta</Btn>} />
+      <PageHeader title={useApi ? "Gestión de Ofertas Laborales" : "Mis Ofertas"} subtitle={`${ofertasPage.total} ofertas registradas`} action={<Btn onClick={() => useApi ? unavailableCrudAction() : setScreen?.("emp-crear-oferta")}><Plus size={14} /> Crear Oferta</Btn>} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
+          <SearchBar value={search} onChange={setSearch} placeholder="Buscar por título, puesto, área, ubicación o empresa..." />
           <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
             <option>Todos</option><option>Activa</option><option>Cerrada</option>
           </select>
@@ -1440,8 +1480,9 @@ function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScree
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr><TH label="titulo" /><TH label="Empresa" /><TH label="puesto" /><TH label="area" /><TH label="modalidad" /><TH label="salario" /><TH label="fecha_publicacion" /><TH label="fecha_cierre" /><TH label="estado_oferta" /><TH label="Acciones" /></tr></thead>
+            <thead><tr><TH label="Título" /><TH label="Empresa" /><TH label="Puesto" /><TH label="Área" /><TH label="Modalidad" /><TH label="Salario" /><TH label="Publicación" /><TH label="Cierre" /><TH label="Estado" /><TH label="Acciones" /></tr></thead>
             <tbody>
+              {filtered.length === 0 && <EmptyState />}
               {filtered.map((o, i) => (
                 <tr key={i}>
                   <TD><span style={{ fontWeight: 600 }}>{o.titulo}</span></TD>
@@ -1476,58 +1517,65 @@ function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScree
 function AdminEncuestas() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AdminEncuesta | null>(null);
+  const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
-  const localEncuestas = (ENCUESTAS as AdminEncuesta[]).filter(e => estadoFiltro === "Todos" || e.estado_laboral === estadoFiltro);
+  const localEncuestas = (ENCUESTAS as AdminEncuesta[]).filter(e => {
+    const q = search.toLowerCase();
+    return `${e.egresado} ${e.nombre_empresa_actual ?? ""} ${e.cargo_actual ?? ""} ${e.area_trabajo ?? ""}`.toLowerCase().includes(q) && (estadoFiltro === "Todos" || e.estado_laboral === estadoFiltro);
+  });
   const fallback = paginatedFallback(localEncuestas, page);
   const encuestasPage = usePaginatedApiData(
     true,
-    () => adminApi.encuestas({ page, pageSize: DEFAULT_PAGE_SIZE, estadoLaboral: estadoFiltro }),
+    () => adminApi.encuestas({ page, pageSize: DEFAULT_PAGE_SIZE, search, estadoLaboral: estadoFiltro }),
     fallback,
-    [page, estadoFiltro]
+    [page, search, estadoFiltro]
   );
   const filtered = encuestasPage.items;
 
   useEffect(() => {
     setPage(1);
-  }, [estadoFiltro]);
+  }, [search, estadoFiltro]);
 
   return (
     <div>
       {selected && (
         <DetailModal title={`Encuesta #${selected.id_encuesta} — ${selected.egresado}`} onClose={() => setSelected(null)}>
-          <DetailSection title="tabla: seguimiento_egresado (vinculación)">
-            <DR label="id_encuesta" value={selected.id_encuesta} />
-            <DR label="egresado (id_egresado → nombre)" value={selected.egresado} />
-            <DR label="fecha_asociacion" value={selected.fecha_asociacion} />
+          <DetailSection title="Egresado">
+            <DR label="Egresado" value={selected.egresado} />
+            <DR label="Fecha de asociación" value={selected.fecha_asociacion} />
           </DetailSection>
-          <DetailSection title="tabla: encuesta_seguimiento">
-            <DR label="fecha_registro" value={selected.fecha_registro} />
-            <DR label="estado_laboral" value={selected.estado_laboral} />
-            <DR label="nombre_empresa_actual" value={selected.nombre_empresa_actual ?? "—"} />
-            <DR label="cargo_actual" value={selected.cargo_actual ?? "—"} />
-            <DR label="area_trabajo" value={selected.area_trabajo} />
-            <DR label="sueldo_mensual DECIMAL(10,2)" value={selected.sueldo_mensual != null ? `S/. ${selected.sueldo_mensual.toLocaleString()}` : "—"} />
-            <DR label="tipo_contrato" value={selected.tipo_contrato ?? "—"} />
-            <DR label="satisfaccion_profesional" value={selected.satisfaccion_profesional} />
-            <DR label="tiempo_conseguir_empleo" value={selected.tiempo_conseguir_empleo} />
-            <DR label="observaciones" value={selected.observaciones} full />
+          <DetailSection title="Respuesta">
+            <DR label="Fecha de registro" value={selected.fecha_registro} />
+            <DR label="Estado laboral" value={selected.estado_laboral} />
+            <DR label="Empresa actual" value={selected.nombre_empresa_actual ?? "—"} />
+            <DR label="Cargo actual" value={selected.cargo_actual ?? "—"} />
+            <DR label="Área de trabajo" value={selected.area_trabajo} />
+            <DR label="Sueldo mensual" value={selected.sueldo_mensual != null ? `S/. ${selected.sueldo_mensual.toLocaleString()}` : "—"} />
+            <DR label="Tipo de contrato" value={selected.tipo_contrato ?? "—"} />
+            <DR label="Satisfacción profesional" value={selected.satisfaccion_profesional} />
+            <DR label="Tiempo para conseguir empleo" value={selected.tiempo_conseguir_empleo} />
+            <DR label="Observaciones" value={selected.observaciones} full />
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Gestión de Encuestas" subtitle="Tablas: encuesta_seguimiento + seguimiento_egresado" action={<Btn variant="outline" onClick={unavailableCrudAction}><BarChart2 size={14} /> Generar Reporte</Btn>} />
+      <PageHeader title="Gestión de Encuestas" subtitle={`${encuestasPage.total} encuestas respondidas`} action={<Btn variant="outline" onClick={unavailableCrudAction}><BarChart2 size={14} /> Generar Reporte</Btn>} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
-          <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
-            <option>Todos</option>
-            {["Empleado", "Independiente", "Desempleado", "Estudiando", "Emprendedor"].map(s => <option key={s}>{s}</option>)}
-          </select>
+          <div style={{ display: "flex", gap: 10, flex: 1 }}>
+            <SearchBar value={search} onChange={setSearch} placeholder="Buscar por egresado, empresa, cargo o área..." />
+            <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
+              <option>Todos</option>
+              {["Empleado", "Independiente", "Desempleado", "Estudiando", "Emprendedor"].map(s => <option key={s}>{s}</option>)}
+            </select>
+          </div>
           <div style={{ fontSize: 12, color: "#64748B", textAlign: "right" }}>
             Las encuestas respondidas forman parte del historial del egresado y no se eliminan.
           </div>
         </div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr><TH label="Egresado" /><TH label="estado_laboral" /><TH label="nombre_empresa_actual" /><TH label="cargo_actual" /><TH label="sueldo_mensual" /><TH label="tipo_contrato" /><TH label="fecha_registro" /><TH label="Acciones" /></tr></thead>
+          <thead><tr><TH label="Egresado" /><TH label="Estado laboral" /><TH label="Empresa actual" /><TH label="Cargo actual" /><TH label="Sueldo mensual" /><TH label="Tipo de contrato" /><TH label="Fecha de registro" /><TH label="Acciones" /></tr></thead>
           <tbody>
+            {filtered.length === 0 && <EmptyState />}
             {filtered.map((e, i) => (
               <tr key={i}>
                 <TD><span style={{ fontWeight: 600 }}>{e.egresado}</span></TD>
@@ -1564,10 +1612,10 @@ function Reportes() {
       <Card style={{ padding: "16px 20px", marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>Filtrar por:</div>
-          <select style={sel}><option>Todas las Facultades (nombre_facultad)</option>{FACULTADES.map(f => <option key={f}>{f}</option>)}</select>
-          <select style={sel}><option>Todas las Carreras (nombre_carrera)</option>{Object.values(CARRERAS).flat().slice(0, 10).map(c => <option key={c}>{c}</option>)}</select>
-          <select style={sel}><option>Todos los Años (fecha_egreso)</option>{["2026", "2025", "2024", "2023", "2022", "2021"].map(y => <option key={y}>{y}</option>)}</select>
-          <select style={sel}><option>estado_laboral: Todos</option>{["Empleado", "Independiente", "Desempleado", "Estudiando", "Emprendedor"].map(s => <option key={s}>{s}</option>)}</select>
+          <select style={sel}><option>Todas las facultades</option>{FACULTADES.map(f => <option key={f}>{f}</option>)}</select>
+          <select style={sel}><option>Todas las carreras</option>{Object.values(CARRERAS).flat().slice(0, 10).map(c => <option key={c}>{c}</option>)}</select>
+          <select style={sel}><option>Todos los años</option>{["2026", "2025", "2024", "2023", "2022", "2021"].map(y => <option key={y}>{y}</option>)}</select>
+          <select style={sel}><option>Todos los estados laborales</option>{["Empleado", "Independiente", "Desempleado", "Estudiando", "Emprendedor"].map(s => <option key={s}>{s}</option>)}</select>
           <button style={{ padding: "8px 16px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>Aplicar</button>
         </div>
       </Card>
@@ -1713,14 +1761,14 @@ function Configuracion() {
         <Card style={{ padding: 28 }}>
           <div style={{ fontWeight: 700, fontSize: 15, color: "#0F172A", marginBottom: 20, paddingBottom: 14, borderBottom: "1px solid #F1F5F9" }}>Configuración del Sistema</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-            <FormField label="Tiempo entre encuestas laborales (meses)" required hint="Controla la lógica de habilitación de encuesta_seguimiento cada N meses.">
+            <FormField label="Tiempo entre encuestas laborales (meses)" required hint="Controla cada cuántos meses se habilita una nueva encuesta.">
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <input name="tiempo_entre_encuestas_meses" style={{ ...INP, width: 90 }} type="number" defaultValue={config?.tiempo_entre_encuestas_meses ?? 0} key={config?.tiempo_entre_encuestas_meses ?? "meses"} min={0} max={24} />
                 <span style={{ fontSize: 13, color: "#64748B" }}>meses</span>
               </div>
               <div style={{ fontSize: 12, color: "#64748B", marginTop: 6 }}>0 = permitir responder inmediatamente.</div>
             </FormField>
-            <FormField label="Estado del sistema" required hint="Corresponde a configuracion_sistema.estado_sistema.">
+            <FormField label="Estado del sistema" required>
               <div style={{ display: "flex", gap: 10 }}>
                 {["Activo", "Inactivo"].map(opt => (
                   <button key={opt} onClick={() => setEstado(opt)} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "2px solid", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, fontSize: 13, borderColor: estado === opt ? (opt === "Activo" ? "#10B981" : "#EF4444") : "#E2E8F0", background: estado === opt ? (opt === "Activo" ? "#DCFCE7" : "#FEE2E2") : "#fff", color: estado === opt ? (opt === "Activo" ? "#166534" : "#991B1B") : "#64748B" }}>
@@ -1730,9 +1778,9 @@ function Configuracion() {
               </div>
             </FormField>
             <div style={{ padding: "14px 16px", background: "#F8FAFC", borderRadius: 10, border: "1px solid #E2E8F0" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 8 }}>INFO BD</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 8 }}>Información del sistema</div>
               <FormField label="Versión del sistema" required><input name="version_sistema" style={INP} defaultValue={config?.version_sistema ?? ""} key={config?.version_sistema ?? "version"} required /></FormField>
-              {[{ label: "Admins registrados (tabla: administrador)", value: "3" }, { label: "Última actualización", value: config?.fecha_actualizacion ?? "Sin datos" }].map((r, i) => (
+              {[{ label: "Administradores registrados", value: "3" }, { label: "Última actualización", value: config?.fecha_actualizacion ?? "Sin datos" }].map((r, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0", borderBottom: i < 1 ? "1px solid #F1F5F9" : "none" }}>
                   <span style={{ color: "#64748B" }}>{r.label}</span>
                   <span style={{ fontWeight: 600, color: "#0F172A" }}>{r.value}</span>
@@ -1749,7 +1797,6 @@ function Configuracion() {
 }
 
 // ─── ADMIN: Auditoría ─────────────────────────────────────────────────────────
-// tabla: auditoria — id_auditoria, tabla_afectada, accion, id_registro, descripcion, fecha_evento, usuario_bd
 function Auditoria() {
   const [search, setSearch] = useState("");
   const [tablaFiltro, setTablaFiltro] = useState("Todas");
@@ -1775,32 +1822,33 @@ function Auditoria() {
 
   return (
     <div>
-      <PageHeader title="Auditoría del Sistema" subtitle="Registro de eventos sobre tablas de la BD (tabla: auditoria)" />
+      <PageHeader title="Auditoría del Sistema" subtitle={`${auditoriaPage.total} eventos registrados`} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10, alignItems: "center" }}>
-          <SearchBar value={search} onChange={setSearch} placeholder="Buscar en descripcion, usuario_bd, tabla_afectada..." />
+          <SearchBar value={search} onChange={setSearch} placeholder="Buscar por descripción, usuario o tabla..." />
           <select value={tablaFiltro} onChange={e => setTablaFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
             <option>Todas</option>
-            {tablas.map(t => <option key={t}>{t}</option>)}
+            {tablas.map(t => <option key={t} value={t}>{humanizeTechnicalText(t)}</option>)}
           </select>
           <select value={accionFiltro} onChange={e => setAccionFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
             <option>Todas</option>
-            <option>INSERT</option>
-            <option>UPDATE</option>
-            <option>DELETE</option>
+            <option value="INSERT">Crear</option>
+            <option value="UPDATE">Actualizar</option>
+            <option value="DELETE">Eliminar</option>
           </select>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr><TH label="id_auditoria" /><TH label="tabla_afectada" /><TH label="accion" /><TH label="id_registro" /><TH label="descripcion" /><TH label="fecha_evento" /><TH label="usuario_bd" /></tr></thead>
+            <thead><tr><TH label="Código" /><TH label="Tabla afectada" /><TH label="Acción" /><TH label="Registro" /><TH label="Descripción" /><TH label="Fecha" /><TH label="Usuario" /></tr></thead>
             <tbody>
+              {filtered.length === 0 && <EmptyState />}
               {filtered.map((a, i) => (
                 <tr key={i}>
                   <TD mono>{a.id_auditoria}</TD>
-                  <TD><span style={{ padding: "3px 9px", background: "#EFF6FF", borderRadius: 6, fontSize: 12, color: "#1E40AF", fontWeight: 500 }}>{a.tabla_afectada}</span></TD>
-                  <TD><StatusBadge label={a.accion} /></TD>
+                  <TD><span style={{ padding: "3px 9px", background: "#EFF6FF", borderRadius: 6, fontSize: 12, color: "#1E40AF", fontWeight: 500 }}>{humanizeTechnicalText(a.tabla_afectada)}</span></TD>
+                  <TD><Badge label={humanizeAction(a.accion)} variant={STATUS_MAP[a.accion] ?? "neutral"} /></TD>
                   <TD mono>{a.id_registro}</TD>
-                  <TD><span style={{ fontSize: 12, color: "#64748B" }}>{a.descripcion}</span></TD>
+                  <TD><span style={{ fontSize: 12, color: "#64748B" }}>{humanizeTechnicalText(a.descripcion)}</span></TD>
                   <TD><span style={{ fontSize: 12 }}>{a.fecha_evento}</span></TD>
                   <TD mono>{a.usuario_bd}</TD>
                 </tr>
@@ -1830,13 +1878,13 @@ function EmpresaDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 24 }}>
         <StatCard icon={<Briefcase size={21} />} label="Ofertas Publicadas" value={dashboard.counts.totalOfertas.toLocaleString()} sub={`${dashboard.counts.ofertasCerradas.toLocaleString()} cerradas`} color="#2563EB" />
-        <StatCard icon={<CheckCircle size={21} />} label="Ofertas Activas" value={dashboard.counts.ofertasActivas.toLocaleString()} sub="estado_oferta = Activa" color="#10B981" />
+        <StatCard icon={<CheckCircle size={21} />} label="Ofertas Activas" value={dashboard.counts.ofertasActivas.toLocaleString()} sub="Publicadas y vigentes" color="#10B981" />
         <StatCard icon={<Users size={21} />} label="Postulaciones recibidas" value={dashboard.counts.totalPostulaciones.toLocaleString()} sub={`${dashboard.counts.postulacionesPendientes.toLocaleString()} pendientes de revisión`} color="#F59E0B" />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 18 }}>
         <Card style={{ padding: 24 }}>
           <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16, color: "#0F172A", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            Mis Ofertas (estado_oferta: Activa)
+            Mis Ofertas Activas
             <Btn variant="outline" small onClick={() => setScreen("admin-ofertas")}><Eye size={13} /> Ver todas</Btn>
           </div>
           {dashboard.ofertasActivas.slice(0, 4).map((o, i) => (
@@ -1884,9 +1932,6 @@ function EmpresaDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
   );
 }
 
-// ─── EMPRESA: Crear Oferta ────────────────────────────────────────────────────
-// Campos según tabla oferta_laboral: titulo*, descripcion*, puesto*, area*, ubicacion*, modalidad*, tipo_contrato*, salario, requisitos, fecha_cierre*
-// fecha_publicacion: se asigna automáticamente. id_empresa: de la sesión activa.
 function CrearOferta() {
   const { toast } = useFeedback();
   const [saving, setSaving] = useState(false);
@@ -1914,38 +1959,38 @@ function CrearOferta() {
 
   return (
     <div>
-      <PageHeader title="Crear Oferta Laboral" subtitle="Tabla: oferta_laboral — los campos con * son NOT NULL" />
+      <PageHeader title="Crear Oferta Laboral" subtitle="Publica una oferta para egresados." />
       <Card style={{ padding: 32, maxWidth: 820 }}>
         <form onSubmit={handleSubmit}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
           <div style={{ gridColumn: "1 / -1" }}>
-            <FormField label="Título (VARCHAR 150)" required><input name="titulo" style={INP} placeholder="Ej: Software Architect" /></FormField>
+            <FormField label="Título" required hint="Máximo 150 caracteres."><input name="titulo" style={INP} placeholder="Ej: Software Architect" maxLength={150} /></FormField>
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
-            <FormField label="Descripción (TEXT)" required><textarea name="descripcion" style={{ ...INP, height: 100, resize: "vertical" }} placeholder="Descripción del puesto..." /></FormField>
+            <FormField label="Descripción" required><textarea name="descripcion" style={{ ...INP, height: 100, resize: "vertical" }} placeholder="Descripción del puesto..." /></FormField>
           </div>
-          <FormField label="Puesto (VARCHAR 100)" required><input name="puesto" style={INP} placeholder="Ej: QA Engineer" /></FormField>
-          <FormField label="Área (VARCHAR 100)" required>
+          <FormField label="Puesto" required><input name="puesto" style={INP} placeholder="Ej: QA Engineer" /></FormField>
+          <FormField label="Área" required>
             <select name="area" style={INP}>
               <option>Seleccionar...</option>
               {["Tecnología", "Finanzas", "Salud", "Industrial", "Educación", "Retail", "Telecomunicaciones", "Logística"].map(a => <option key={a}>{a}</option>)}
             </select>
           </FormField>
-          <FormField label="Ubicación (VARCHAR 150)" required><input name="ubicacion" style={INP} placeholder="Ej: Huánuco" /></FormField>
-          <FormField label="Modalidad (VARCHAR 50)" required>
+          <FormField label="Ubicación" required><input name="ubicacion" style={INP} placeholder="Ej: Huánuco" /></FormField>
+          <FormField label="Modalidad" required>
             <select name="modalidad" style={INP}><option>Presencial</option><option>Remoto</option><option>Híbrido</option></select>
           </FormField>
-          <FormField label="Tipo de contrato (VARCHAR 50)" required>
+          <FormField label="Tipo de contrato" required>
             <select name="tipo_contrato" style={INP}><option>Indefinido</option><option>Temporal</option><option>Practicante</option></select>
           </FormField>
-          <FormField label="Salario — DECIMAL(10,2)" hint="Campo nullable. Dejar vacío si no se desea publicar."><input name="salario" style={INP} type="number" step="0.01" placeholder="Ej: 3500.00" /></FormField>
+          <FormField label="Salario" hint="Campo opcional. Dejar vacío si no se desea publicar."><input name="salario" style={INP} type="number" step="0.01" placeholder="Ej: 3500.00" /></FormField>
           <div style={{ gridColumn: "1 / -1" }}>
-            <FormField label="Requisitos (TEXT)" hint="Campo nullable."><textarea name="requisitos" style={{ ...INP, height: 80, resize: "vertical" }} placeholder="Ej: Disponibilidad inmediata..." /></FormField>
+            <FormField label="Requisitos" hint="Campo opcional."><textarea name="requisitos" style={{ ...INP, height: 80, resize: "vertical" }} placeholder="Ej: Disponibilidad inmediata..." /></FormField>
           </div>
-          <FormField label="Fecha cierre (DATE)" required><input name="fecha_cierre" style={INP} type="date" /></FormField>
+          <FormField label="Fecha de cierre" required hint="La fecha de cierre debe ser posterior a la publicación."><input name="fecha_cierre" style={INP} type="date" /></FormField>
           <div style={{ display: "flex", alignItems: "flex-end" }}>
             <div style={{ padding: "10px 14px", background: "#F8FAFC", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12, color: "#64748B", width: "100%" }}>
-              <strong>fecha_publicacion</strong>: se asignará automáticamente (DATE NOT NULL = CURDATE()).
+              La fecha de publicación se asignará automáticamente.
             </div>
           </div>
         </div>
@@ -1959,8 +2004,6 @@ function CrearOferta() {
   );
 }
 
-// ─── EMPRESA: Postulaciones ───────────────────────────────────────────────────
-// tabla: postulacion — estado_postulacion: En Proceso | Aceptado | Pendiente | Rechazado
 function PostulacionesRecibidas() {
   const { toast } = useFeedback();
   const [search, setSearch] = useState("");
@@ -1999,22 +2042,21 @@ function PostulacionesRecibidas() {
     <div>
       {selected && (
         <DetailModal title={`Postulación #${selected.id_postulacion} — ${selected.egresado}`} onClose={() => setSelected(null)}>
-          <DetailSection title="tabla: postulacion + oferta_laboral + egresado">
-            <DR label="id_postulacion" value={selected.id_postulacion} />
-            <DR label="egresado" value={selected.egresado} />
-            <DR label="carrera" value={selected.carrera} />
-            <DR label="oferta" value={selected.oferta} />
-            <DR label="fecha_postulacion" value={selected.fecha_postulacion} />
-            <DR label="estado_postulacion" value={selected.estado_postulacion} />
-            <DR label="cv_adjunto" value={selected.cv_adjunto} />
-            <DR label="observaciones" value={selected.observaciones} full />
+          <DetailSection title="Detalle de postulación">
+            <DR label="Egresado" value={selected.egresado} />
+            <DR label="Carrera" value={selected.carrera} />
+            <DR label="Oferta" value={selected.oferta} />
+            <DR label="Fecha de postulación" value={selected.fecha_postulacion} />
+            <DR label="Estado" value={selected.estado_postulacion} />
+            <DR label="CV adjunto" value={selected.cv_adjunto} />
+            <DR label="Observaciones" value={selected.observaciones} full />
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Postulaciones Recibidas" subtitle="Tabla: postulacion — estado_postulacion: En Proceso | Aceptado | Pendiente | Rechazado" />
+      <PageHeader title="Postulaciones Recibidas" subtitle={`${postulacionesPage.total} postulaciones recibidas`} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10, alignItems: "center" }}>
-          <SearchBar value={search} onChange={setSearch} placeholder="Buscar egresado, carrera..." />
+          <SearchBar value={search} onChange={setSearch} placeholder="Buscar por egresado, carrera u oferta..." />
           <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
             <option>Todos</option>
             <option>En Proceso</option>
@@ -2024,8 +2066,9 @@ function PostulacionesRecibidas() {
           </select>
         </div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr><TH label="Egresado" /><TH label="Carrera" /><TH label="Oferta" /><TH label="fecha_postulacion" /><TH label="estado_postulacion" /><TH label="cv_adjunto" /><TH label="Acciones" /></tr></thead>
+          <thead><tr><TH label="Egresado" /><TH label="Carrera" /><TH label="Oferta" /><TH label="Fecha" /><TH label="Estado" /><TH label="CV adjunto" /><TH label="Acciones" /></tr></thead>
           <tbody>
+            {filtered.length === 0 && <EmptyState />}
             {filtered.map((p, i) => (
               <tr key={i}>
                 <TD><div><div style={{ fontWeight: 600 }}>{p.egresado}</div><div style={{ fontSize: 12, color: "#64748B" }}>{p.carrera}</div></div></TD>
@@ -2051,11 +2094,6 @@ function PostulacionesRecibidas() {
   );
 }
 
-// ─── EMPRESA: Perfil Empresa ──────────────────────────────────────────────────
-// Tabla empresa: ruc CHAR(11), razon_social VARCHAR(150), nombre_comercial VARCHAR(150),
-// sector VARCHAR(100), direccion VARCHAR(255), telefono VARCHAR(15), pagina_web VARCHAR(100)
-// correo: NO existe en tabla empresa. Viene de usuario.correo via JOIN.
-// NOTA: la tabla empresa NO tiene campo `descripcion`.
 function PerfilEmpresa() {
   const { toast } = useFeedback();
   const profile = useApiData(true, empresaApi.perfil, EMPRESAS[0] as AdminEmpresa | null) ?? EMPRESAS[0];
@@ -2085,25 +2123,25 @@ function PerfilEmpresa() {
 
   return (
     <div>
-      <PageHeader title="Perfil de Empresa" subtitle="Tabla: empresa + correo de usuario.correo (JOIN). Sin campo descripcion." />
+      <PageHeader title="Perfil de Empresa" subtitle="Datos públicos y de contacto de la empresa." />
       <Card key={profile.id_usuario} style={{ padding: 32, maxWidth: 820 }}>
         <form onSubmit={handleSubmit}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-          <FormField label="RUC — CHAR(11)" required><input style={INP} defaultValue={profile.ruc} maxLength={11} /></FormField>
-          <FormField label="Razón social (VARCHAR 150)" required><input style={INP} defaultValue={profile.razon_social} /></FormField>
-          <FormField label="Nombre comercial (VARCHAR 150)"><input name="nombre_comercial" style={INP} defaultValue={profile.nombre_comercial ?? ""} /></FormField>
-          <FormField label="Sector (VARCHAR 100)" required>
+          <FormField label="RUC" required hint="11 dígitos."><input style={INP} defaultValue={profile.ruc} maxLength={11} /></FormField>
+          <FormField label="Razón social" required><input style={INP} defaultValue={profile.razon_social} /></FormField>
+          <FormField label="Nombre comercial"><input name="nombre_comercial" style={INP} defaultValue={profile.nombre_comercial ?? ""} /></FormField>
+          <FormField label="Sector" required>
             <select name="sector" style={INP} defaultValue={profile.sector}>{["Salud", "Tecnología", "Finanzas", "Industrial", "Retail", "Educación", "Telecomunicaciones", profile.sector].filter((s, i, arr) => arr.indexOf(s) === i).map(s => <option key={s}>{s}</option>)}</select>
           </FormField>
           <div style={{ gridColumn: "1 / -1" }}>
-            <FormField label="Dirección (VARCHAR 255)" required><input name="direccion" style={INP} defaultValue={profile.direccion} /></FormField>
+            <FormField label="Dirección" required><input name="direccion" style={INP} defaultValue={profile.direccion} /></FormField>
           </div>
-          <FormField label="Teléfono (VARCHAR 15)"><input name="telefono" style={INP} defaultValue={profile.telefono ?? ""} maxLength={15} /></FormField>
-          <FormField label="Correo — usuario.correo (vía JOIN)" hint="Este campo pertenece a la tabla usuario, no a empresa. Se actualiza mediante UPDATE usuario SET correo.">
+          <FormField label="Teléfono"><input name="telefono" style={INP} defaultValue={profile.telefono ?? ""} maxLength={15} /></FormField>
+          <FormField label="Correo">
             <input name="correo" style={INP} type="email" defaultValue={profile.correo} />
           </FormField>
           <div style={{ gridColumn: "1 / -1" }}>
-            <FormField label="Página web (VARCHAR 100)"><input name="pagina_web" style={INP} defaultValue={profile.pagina_web ?? ""} maxLength={100} /></FormField>
+            <FormField label="Página web"><input name="pagina_web" style={INP} defaultValue={profile.pagina_web ?? ""} maxLength={100} /></FormField>
           </div>
         </div>
         <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
@@ -2150,13 +2188,13 @@ function EgresadoDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 24 }}>
         <StatCard icon={<FileText size={21} />} label="Mis Postulaciones" value={dashboard.metrics.totalPostulaciones.toLocaleString()} sub={`Estado laboral: ${dashboard.metrics.estadoLaboralActual}`} color="#2563EB" />
-        <StatCard icon={<Calendar size={21} />} label="Última Empresa" value={dashboard.metrics.ultimaEmpresa} sub="fn_ultima_empresa(id_egresado)" color="#6366F1" />
-        <StatCard icon={<Briefcase size={21} />} label="Ofertas disponibles" value={dashboard.metrics.ofertasActivas.toLocaleString()} sub="estado_oferta = Activa" color="#10B981" />
+        <StatCard icon={<Calendar size={21} />} label="Última Empresa" value={dashboard.metrics.ultimaEmpresa} sub="Según tu historial laboral" color="#6366F1" />
+        <StatCard icon={<Briefcase size={21} />} label="Ofertas disponibles" value={dashboard.metrics.ofertasActivas.toLocaleString()} sub="Publicadas y vigentes" color="#10B981" />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 18 }}>
         <Card style={{ padding: 24 }}>
           <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16, color: "#0F172A", display: "flex", justifyContent: "space-between" }}>
-            Ofertas Recomendadas (estado_oferta: Activa)
+            Ofertas Recomendadas
             <Btn variant="outline" small onClick={() => setScreen("egr-bolsa")}><Eye size={13} /> Ver todas</Btn>
           </div>
           {dashboard.ofertasRecomendadas.slice(0, 3).map((o, i) => (
@@ -2198,7 +2236,6 @@ function BolsaLaboral() {
   const { toast } = useFeedback();
   const [search, setSearch] = useState("");
   const [modalidad, setModalidad] = useState("Todos");
-  const [contrato, setContrato] = useState("Todos");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AdminOferta | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -2207,21 +2244,20 @@ function BolsaLaboral() {
     const q = search.toLowerCase();
     const match = o.titulo.toLowerCase().includes(q) || o.empresa.toLowerCase().includes(q) || o.area.toLowerCase().includes(q) || o.puesto.toLowerCase().includes(q);
     const mok = modalidad === "Todos" || o.modalidad === modalidad;
-    const cok = contrato === "Todos" || o.tipo_contrato === contrato;
-    return o.estado_oferta === "Activa" && match && mok && cok;
+    return o.estado_oferta === "Activa" && match && mok;
   });
   const fallback = paginatedFallback(localOfertas, page);
   const ofertasPage = usePaginatedApiData(
     true,
-    () => egresadoApi.bolsa({ page, pageSize: DEFAULT_PAGE_SIZE, search, modalidad, contrato }),
+    () => egresadoApi.bolsa({ page, pageSize: DEFAULT_PAGE_SIZE, search, modalidad }),
     fallback,
-    [page, search, modalidad, contrato, refreshKey]
+    [page, search, modalidad, refreshKey]
   );
   const filtered = ofertasPage.items;
 
   useEffect(() => {
     setPage(1);
-  }, [search, modalidad, contrato]);
+  }, [search, modalidad]);
 
   async function handlePostular(idOferta: number) {
     try {
@@ -2237,45 +2273,43 @@ function BolsaLaboral() {
     <div>
       {selected && (
         <DetailModal title={`${selected.titulo} — ${selected.empresa}`} onClose={() => setSelected(null)}>
-          <DetailSection title="tabla: oferta_laboral">
-            <DR label="id_oferta" value={selected.id_oferta} />
-            <DR label="titulo" value={selected.titulo} />
-            <DR label="puesto" value={selected.puesto} />
-            <DR label="area" value={selected.area} />
-            <DR label="ubicacion" value={selected.ubicacion} />
-            <DR label="modalidad" value={selected.modalidad} />
-            <DR label="tipo_contrato" value={selected.tipo_contrato} />
-            <DR label="salario DECIMAL(10,2)" value={selected.salario != null ? `S/. ${selected.salario.toLocaleString()}` : "—"} />
-            <DR label="fecha_publicacion" value={selected.fecha_publicacion} />
-            <DR label="fecha_cierre" value={selected.fecha_cierre} />
-            <DR label="estado_oferta" value={selected.estado_oferta} />
-            <DR label="id_empresa (razon_social)" value={selected.empresa} full />
-            <DR label="descripcion" value={selected.descripcion} full />
-            <DR label="requisitos" value={selected.requisitos} full />
+          <DetailSection title="Datos de la oferta">
+            <DR label="Título" value={selected.titulo} />
+            <DR label="Puesto" value={selected.puesto} />
+            <DR label="Área" value={selected.area} />
+            <DR label="Ubicación" value={selected.ubicacion} />
+            <DR label="Modalidad" value={selected.modalidad} />
+            <DR label="Tipo de contrato" value={selected.tipo_contrato} />
+            <DR label="Salario" value={selected.salario != null ? `S/. ${selected.salario.toLocaleString()}` : "—"} />
+            <DR label="Fecha de publicación" value={selected.fecha_publicacion} />
+            <DR label="Fecha de cierre" value={selected.fecha_cierre} />
+            <DR label="Estado" value={selected.estado_oferta} />
+            <DR label="Empresa" value={selected.empresa} full />
+            <DR label="Descripción" value={selected.descripcion} full />
+            <DR label="Requisitos" value={selected.requisitos} full />
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Bolsa Laboral" subtitle="Tabla: oferta_laboral — estado_oferta: Activa | Cerrada" />
+      <PageHeader title="Bolsa Laboral" subtitle={`${ofertasPage.total} ofertas activas disponibles`} />
       <Card style={{ padding: "16px 20px", marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
             <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} />
-            <input style={{ width: "100%", padding: "9px 12px 9px 36px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} placeholder="Buscar titulo, puesto, area, empresa..." value={search} onChange={e => setSearch(e.target.value)} />
+            <input style={{ width: "100%", padding: "9px 12px 9px 36px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} placeholder="Buscar por título, puesto, área o empresa..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             {["Todos", "Presencial", "Remoto", "Híbrido"].map(m => (
               <button key={m} onClick={() => setModalidad(m)} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", borderColor: modalidad === m ? "#2563EB" : "#E2E8F0", background: modalidad === m ? "#EFF6FF" : "#fff", color: modalidad === m ? "#2563EB" : "#64748B" }}>{m}</button>
             ))}
           </div>
-          <select value={contrato} onChange={e => setContrato(e.target.value)} style={{ padding: "8px 12px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
-            <option>Todos</option>
-            <option>Indefinido</option>
-            <option>Temporal</option>
-            <option>Practicante</option>
-          </select>
         </div>
       </Card>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+        {filtered.length === 0 && (
+          <Card style={{ padding: "22px", gridColumn: "1 / -1" }}>
+            <div style={{ fontSize: 13, color: "#64748B", textAlign: "center" }}>No se encontraron ofertas.</div>
+          </Card>
+        )}
         {filtered.map((o, i) => (
           <Card key={i} style={{ padding: 22 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
@@ -2307,41 +2341,45 @@ function BolsaLaboral() {
 
 // ─── EGRESADO: Mis Postulaciones ──────────────────────────────────────────────
 function MisPostulaciones() {
+  const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<EgresadoPostulacion | null>(null);
-  const localPostulaciones = (POSTULACIONES as EgresadoPostulacion[]).slice(0, 3).filter(p => estadoFiltro === "Todos" || p.estado_postulacion === estadoFiltro);
+  const localPostulaciones = (POSTULACIONES as EgresadoPostulacion[]).slice(0, 3).filter(p => {
+    const q = search.toLowerCase();
+    return `${p.oferta} ${p.empresa} ${p.observaciones ?? ""}`.toLowerCase().includes(q) && (estadoFiltro === "Todos" || p.estado_postulacion === estadoFiltro);
+  });
   const fallback = paginatedFallback(localPostulaciones, page);
   const postulacionesPage = usePaginatedApiData(
     true,
-    () => egresadoApi.postulaciones({ page, pageSize: DEFAULT_PAGE_SIZE, estado: estadoFiltro }),
+    () => egresadoApi.postulaciones({ page, pageSize: DEFAULT_PAGE_SIZE, search, estado: estadoFiltro }),
     fallback,
-    [page, estadoFiltro]
+    [page, search, estadoFiltro]
   );
   const filtered = postulacionesPage.items;
 
   useEffect(() => {
     setPage(1);
-  }, [estadoFiltro]);
+  }, [search, estadoFiltro]);
 
   return (
     <div>
       {selected && (
         <DetailModal title={`Postulación #${selected.id_postulacion} — ${selected.oferta}`} onClose={() => setSelected(null)}>
-          <DetailSection title="tabla: postulacion + oferta_laboral + empresa">
-            <DR label="id_postulacion" value={selected.id_postulacion} />
-            <DR label="oferta" value={selected.oferta} />
-            <DR label="empresa" value={selected.empresa} />
-            <DR label="fecha_postulacion" value={selected.fecha_postulacion} />
-            <DR label="estado_postulacion" value={selected.estado_postulacion} />
-            <DR label="cv_adjunto" value={selected.cv_adjunto} />
-            <DR label="observaciones" value={selected.observaciones} full />
+          <DetailSection title="Detalle de postulación">
+            <DR label="Oferta" value={selected.oferta} />
+            <DR label="Empresa" value={selected.empresa} />
+            <DR label="Fecha de postulación" value={selected.fecha_postulacion} />
+            <DR label="Estado" value={selected.estado_postulacion} />
+            <DR label="CV adjunto" value={selected.cv_adjunto} />
+            <DR label="Observaciones" value={selected.observaciones} full />
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Mis Postulaciones" subtitle="Tabla: postulacion — mis registros como id_egresado" />
+      <PageHeader title="Mis Postulaciones" subtitle={`${postulacionesPage.total} postulaciones registradas`} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
+          <SearchBar value={search} onChange={setSearch} placeholder="Buscar por oferta, empresa u observaciones..." />
           <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
             <option>Todos</option>
             <option>En Proceso</option>
@@ -2351,8 +2389,9 @@ function MisPostulaciones() {
           </select>
         </div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr><TH label="Oferta (titulo)" /><TH label="Empresa" /><TH label="fecha_postulacion" /><TH label="estado_postulacion" /><TH label="cv_adjunto" /><TH label="Acciones" /></tr></thead>
+          <thead><tr><TH label="Oferta" /><TH label="Empresa" /><TH label="Fecha" /><TH label="Estado" /><TH label="CV adjunto" /><TH label="Acciones" /></tr></thead>
           <tbody>
+            {filtered.length === 0 && <EmptyState />}
             {filtered.map((p, i) => (
               <tr key={i}>
                 <TD><div><div style={{ fontWeight: 600 }}>{p.oferta}</div><div style={{ fontSize: 12, color: "#64748B" }}>{p.observaciones}</div></div></TD>
@@ -2371,11 +2410,6 @@ function MisPostulaciones() {
   );
 }
 
-// ─── EGRESADO: Mi Perfil ──────────────────────────────────────────────────────
-// tabla: egresado: id_usuario(FK), dni CHAR(8), nombre_egresado, apellidos_egresado,
-//   telefono VARCHAR(15), direccion VARCHAR(255), fecha_egreso DATE, sexo CHAR(1), id_carrera(FK)
-// tabla: usuario: nombre_usuario, correo, estado_usuario
-// NOTA: No existe campo `foto` en la BD. El avatar es solo visual.
 function MiPerfil() {
   const { toast } = useFeedback();
   const [refreshKey, setRefreshKey] = useState(0);
@@ -2421,7 +2455,7 @@ function MiPerfil() {
 
   return (
     <div>
-      <PageHeader title="Mi Perfil" subtitle="Tablas: egresado + usuario (id_usuario compartido). Sin campo descripcion." />
+      <PageHeader title="Mi Perfil" subtitle="Datos personales, académicos y de contacto." />
       <Card key={profile.id_usuario} style={{ padding: 32, maxWidth: 820 }}>
         <form onSubmit={handleSubmit}>
         <div style={{ display: "flex", gap: 24, alignItems: "flex-start", marginBottom: 28, paddingBottom: 24, borderBottom: "1px solid #F1F5F9" }}>
@@ -2433,46 +2467,46 @@ function MiPerfil() {
             <div style={{ fontSize: 20, fontWeight: 700, color: "#0F172A" }}>{profile.nombre_egresado} {profile.apellidos_egresado}</div>
             <div style={{ fontSize: 14, color: "#64748B", marginTop: 3 }}>{profile.nombre_carrera} · {profile.nombre_facultad} · {profile.grado_academico}</div>
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <Badge label={`estado_usuario: ${profile.estado_usuario}`} variant={profile.estado_usuario === "Activo" ? "success" : "neutral"} />
-              <Badge label={`sexo: ${profile.sexo}`} variant="info" />
+              <Badge label={`Estado: ${profile.estado_usuario}`} variant={profile.estado_usuario === "Activo" ? "success" : "neutral"} />
+              <Badge label={`Sexo: ${profile.sexo}`} variant="info" />
             </div>
           </div>
         </div>
 
-        <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A", marginBottom: 14 }}>Datos Personales (tabla: egresado)</div>
+        <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A", marginBottom: 14 }}>Datos personales</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 28 }}>
-          <FormField label="DNI — CHAR(8)" required><input name="dni" style={INP} defaultValue={profile.dni} maxLength={8} /></FormField>
-          <FormField label="Sexo — CHAR(1)" required hint="M = Masculino, F = Femenino">
+          <FormField label="DNI" required hint="8 dígitos."><input name="dni" style={INP} defaultValue={profile.dni} maxLength={8} /></FormField>
+          <FormField label="Sexo" required hint="M = Masculino, F = Femenino">
             <select name="sexo" style={INP} defaultValue={profile.sexo}>
               <option value="M">Masculino (M)</option>
               <option value="F">Femenino (F)</option>
             </select>
           </FormField>
-          <FormField label="Nombre egresado (VARCHAR 100)" required><input name="nombre_egresado" style={INP} defaultValue={profile.nombre_egresado} /></FormField>
-          <FormField label="Apellidos egresado (VARCHAR 100)" required><input name="apellidos_egresado" style={INP} defaultValue={profile.apellidos_egresado} /></FormField>
-          <FormField label="Teléfono (VARCHAR 15)"><input name="telefono" style={INP} defaultValue={profile.telefono ?? ""} maxLength={15} /></FormField>
-          <FormField label="Fecha de egreso (DATE)" required><input name="fecha_egreso" style={INP} type="date" defaultValue={profile.fecha_egreso} /></FormField>
+          <FormField label="Nombres" required><input name="nombre_egresado" style={INP} defaultValue={profile.nombre_egresado} /></FormField>
+          <FormField label="Apellidos" required><input name="apellidos_egresado" style={INP} defaultValue={profile.apellidos_egresado} /></FormField>
+          <FormField label="Teléfono"><input name="telefono" style={INP} defaultValue={profile.telefono ?? ""} maxLength={15} /></FormField>
+          <FormField label="Fecha de egreso" required><input name="fecha_egreso" style={INP} type="date" defaultValue={profile.fecha_egreso} /></FormField>
           <div style={{ gridColumn: "1 / -1" }}>
-            <FormField label="Dirección (VARCHAR 255)"><input name="direccion" style={INP} defaultValue={profile.direccion ?? ""} /></FormField>
+            <FormField label="Dirección"><input name="direccion" style={INP} defaultValue={profile.direccion ?? ""} /></FormField>
           </div>
         </div>
 
-        <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A", marginBottom: 14 }}>Datos Académicos (tabla: carrera → facultad)</div>
+        <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A", marginBottom: 14 }}>Datos académicos</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 28 }}>
-          <FormField label="Facultad (id_facultad → nombre_facultad)">
+          <FormField label="Facultad">
             <select style={INP} defaultValue={profile.nombre_facultad}>{facultades.map(f => <option key={f}>{f}</option>)}</select>
           </FormField>
-          <FormField label="Carrera (id_carrera → nombre_carrera)" required>
+          <FormField label="Carrera" required>
             <select name="nombre_carrera" style={INP} defaultValue={profile.nombre_carrera}>{carrerasDisponibles.map(c => <option key={`${c.id_carrera}-${c.nombre_carrera}`} value={c.nombre_carrera}>{c.nombre_carrera}</option>)}</select>
           </FormField>
         </div>
 
-        <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A", marginBottom: 14 }}>Cuenta de Acceso (tabla: usuario)</div>
+        <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A", marginBottom: 14 }}>Cuenta de acceso</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-          <FormField label="Nombre de usuario (nombre_usuario)" hint="No puede modificarse.">
+          <FormField label="Usuario" hint="No puede modificarse.">
             <input style={{ ...INP, background: "#F8FAFC", color: "#64748B" }} defaultValue={profile.nombre_usuario} readOnly />
           </FormField>
-          <FormField label="Correo (usuario.correo)" required><input name="correo" style={INP} type="email" defaultValue={profile.correo} /></FormField>
+          <FormField label="Correo" required><input name="correo" style={INP} type="email" defaultValue={profile.correo} /></FormField>
         </div>
 
         <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
@@ -2485,13 +2519,10 @@ function MiPerfil() {
   );
 }
 
-// ─── EGRESADO: Historial Laboral ──────────────────────────────────────────────
-// tabla: historial_laboral — campos: nombre_empresa VARCHAR(150), cargo VARCHAR(100),
-//   fecha_inicio DATE, fecha_fin DATE (nullable), salario DECIMAL(10,2) (nullable),
-//   modalidad VARCHAR(50), actual BOOLEAN, id_egresado FK
-// IMPORTANTE: NO existe campo `descripcion` en historial_laboral.
 function HistorialLaboral() {
   const { toast, requestConfirmation } = useFeedback();
+  const [search, setSearch] = useState("");
+  const [actualFiltro, setActualFiltro] = useState("Todos");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<HistorialLaboralItem | null>(null);
   const [actualFlag, setActualFlag] = useState(false);
@@ -2501,10 +2532,15 @@ function HistorialLaboral() {
   const fallback = paginatedFallback(HISTORIAL_LABORAL as HistorialLaboralItem[], page);
   const historialPage = usePaginatedApiData(
     true,
-    () => egresadoApi.historial({ page, pageSize: DEFAULT_PAGE_SIZE }),
+    () => egresadoApi.historial({ page, pageSize: DEFAULT_PAGE_SIZE, search, actual: actualFiltro }),
     fallback,
-    [page, refreshKey]
+    [page, search, actualFiltro, refreshKey]
   );
+  const historialItems = historialPage.items;
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, actualFiltro]);
 
   function openCreateForm() {
     setEditing(null);
@@ -2574,29 +2610,29 @@ function HistorialLaboral() {
 
   return (
     <div>
-      <PageHeader title="Historial Laboral" subtitle="Tabla: historial_laboral. Sin campo descripcion. Campo actual = BOOLEAN." action={<Btn onClick={openCreateForm}><Plus size={14} /> Agregar Experiencia</Btn>} />
+      <PageHeader title="Historial Laboral" subtitle={`${historialPage.total} experiencias registradas`} action={<Btn onClick={openCreateForm}><Plus size={14} /> Agregar Experiencia</Btn>} />
 
       {showForm && (
         <Card style={{ padding: 28, marginBottom: 20 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>{editing ? "Editar Experiencia" : "Nueva Experiencia"} — tabla: historial_laboral</div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>{editing ? "Editar Experiencia" : "Nueva Experiencia"}</div>
           <form onSubmit={handleSubmit}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-            <FormField label="Nombre empresa (VARCHAR 150)" required><input name="nombre_empresa" style={INP} placeholder="Ej: Talleres Castellana S.A.D" defaultValue={editing?.nombre_empresa ?? ""} /></FormField>
-            <FormField label="Cargo (VARCHAR 100)" required><input name="cargo" style={INP} placeholder="Ej: Cloud Engineer" defaultValue={editing?.cargo ?? ""} /></FormField>
-            <FormField label="Fecha inicio (DATE)" required><input name="fecha_inicio" style={INP} type="date" defaultValue={editing?.fecha_inicio ?? ""} /></FormField>
-            <FormField label="Fecha fin (DATE — nullable)" hint={actualFlag ? "NULL cuando actual = TRUE" : "Dejar vacío si aún labora ahí."}>
+            <FormField label="Empresa" required><input name="nombre_empresa" style={INP} placeholder="Ej: Talleres Castellana S.A.D" defaultValue={editing?.nombre_empresa ?? ""} /></FormField>
+            <FormField label="Cargo" required><input name="cargo" style={INP} placeholder="Ej: Cloud Engineer" defaultValue={editing?.cargo ?? ""} /></FormField>
+            <FormField label="Fecha de inicio" required><input name="fecha_inicio" style={INP} type="date" defaultValue={editing?.fecha_inicio ?? ""} /></FormField>
+            <FormField label="Fecha de fin" hint={actualFlag ? "No se registra fecha de fin para el trabajo actual." : "Dejar vacío si aún labora ahí."}>
               <input name="fecha_fin" style={INP} type="date" disabled={actualFlag} defaultValue={editing?.fecha_fin ?? ""} />
             </FormField>
-            <FormField label="Modalidad (VARCHAR 50)" required>
+            <FormField label="Modalidad" required>
               <select name="modalidad" style={INP} defaultValue={editing?.modalidad ?? "Presencial"}><option>Presencial</option><option>Remoto</option><option>Híbrido</option></select>
             </FormField>
-            <FormField label="Salario — DECIMAL(10,2) (nullable)"><input name="salario" style={INP} type="number" step="0.01" placeholder="Ej: 3500.00" defaultValue={editing?.salario ?? ""} /></FormField>
+            <FormField label="Salario" hint="Campo opcional."><input name="salario" style={INP} type="number" step="0.01" placeholder="Ej: 3500.00" defaultValue={editing?.salario ?? ""} /></FormField>
             <div style={{ gridColumn: "1 / -1" }}>
               <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
                 <input type="checkbox" checked={actualFlag} onChange={e => setActualFlag(e.target.checked)} style={{ width: 16, height: 16 }} />
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>actual = TRUE (trabajo actual)</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>Trabajo actual</span>
               </label>
-              <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 4, marginLeft: 26 }}>Si actual = TRUE, fecha_fin quedará en NULL en la BD.</div>
+              <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 4, marginLeft: 26 }}>Si marcas esta opción, la fecha de fin queda vacía.</div>
             </div>
           </div>
           <div style={{ marginTop: 20, display: "flex", gap: 10 }}>
@@ -2608,18 +2644,27 @@ function HistorialLaboral() {
       )}
 
       <Card>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10, alignItems: "center" }}>
+          <SearchBar value={search} onChange={setSearch} placeholder="Buscar por empresa, cargo o modalidad..." />
+          <select value={actualFiltro} onChange={e => setActualFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
+            <option>Todos</option>
+            <option value="true">Actual</option>
+            <option value="false">No actual</option>
+          </select>
+        </div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr><TH label="nombre_empresa" /><TH label="cargo" /><TH label="fecha_inicio" /><TH label="fecha_fin" /><TH label="modalidad" /><TH label="salario" /><TH label="actual (BOOLEAN)" /><TH label="Acciones" /></tr></thead>
+          <thead><tr><TH label="Empresa" /><TH label="Cargo" /><TH label="Inicio" /><TH label="Fin" /><TH label="Modalidad" /><TH label="Salario" /><TH label="Actual" /><TH label="Acciones" /></tr></thead>
           <tbody>
-            {historialPage.items.map((h, i) => (
+            {historialItems.length === 0 && <EmptyState />}
+            {historialItems.map((h, i) => (
               <tr key={i}>
                 <TD><span style={{ fontWeight: 600 }}>{h.nombre_empresa}</span></TD>
                 <TD>{h.cargo}</TD>
                 <TD>{h.fecha_inicio}</TD>
-                <TD>{h.actual ? <Badge label="NULL (En curso)" variant="success" /> : h.fecha_fin}</TD>
+                <TD>{h.actual ? <Badge label="En curso" variant="success" /> : h.fecha_fin}</TD>
                 <TD><span style={{ padding: "3px 10px", background: "#F1F5F9", borderRadius: 6, fontSize: 12 }}>{h.modalidad}</span></TD>
                 <TD><span style={{ fontWeight: 600, color: "#10B981" }}>{h.salario != null ? `S/. ${h.salario.toLocaleString()}` : "—"}</span></TD>
-                <TD><Badge label={h.actual ? "TRUE" : "FALSE"} variant={h.actual ? "success" : "neutral"} /></TD>
+                <TD><Badge label={h.actual ? "Sí" : "No"} variant={h.actual ? "success" : "neutral"} /></TD>
                 <TD>
                   <div style={{ display: "flex", gap: 2 }}>
                     <Btn variant="ghost" small onClick={() => openEditForm(h)}><Edit2 size={14} /></Btn>
@@ -2630,19 +2675,12 @@ function HistorialLaboral() {
             ))}
           </tbody>
         </table>
-        <Pagination total={historialPage.total} showing={historialPage.items.length} page={historialPage.page} pageSize={historialPage.pageSize} onPageChange={setPage} />
+        <Pagination total={historialPage.total} showing={historialItems.length} page={historialPage.page} pageSize={historialPage.pageSize} onPageChange={setPage} />
       </Card>
     </div>
   );
 }
 
-// ─── EGRESADO: Encuesta de Seguimiento ───────────────────────────────────────
-// tabla: encuesta_seguimiento + seguimiento_egresado
-// Valores EXACTOS de la BD:
-//   estado_laboral: Empleado | Independiente | Desempleado | Estudiando | Emprendedor
-//   tipo_contrato: Indefinido | Temporal | Practicante
-//   satisfaccion_profesional: Muy Satisfecho | Satisfecho | Regular | Insatisfecho
-//   tiempo_conseguir_empleo: 1 mes | 3 meses | 6 meses | 1 año
 function EncuestaSeguimiento() {
   const { toast } = useFeedback();
   const [refreshKey, setRefreshKey] = useState(0);
@@ -2684,7 +2722,7 @@ function EncuestaSeguimiento() {
 
   return (
     <div>
-      <PageHeader title="Encuesta de Seguimiento Laboral" subtitle="Tablas: encuesta_seguimiento + seguimiento_egresado (fecha_asociacion)" />
+      <PageHeader title="Encuesta de Seguimiento Laboral" subtitle="Actualiza tu situación laboral cuando esté disponible." />
 
       <Card style={{ padding: 20, marginBottom: 20, border: "1px solid #FEF3C7" }}>
         <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
@@ -2693,11 +2731,11 @@ function EncuestaSeguimiento() {
             <div style={{ fontWeight: 700, fontSize: 14, color: "#92400E", marginBottom: 10 }}>{canSubmit ? "Encuesta disponible" : "Encuesta no disponible aún"}</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div style={{ background: "#F8FAFC", borderRadius: 8, padding: "10px 14px" }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Última encuesta (fecha_registro)</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Última encuesta</div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: "#0F172A" }}>{lastSurveyDate}</div>
               </div>
               <div style={{ background: "#FEF3C7", borderRadius: 8, padding: "10px 14px" }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "#92400E", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Próxima disponible (+6 meses)</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#92400E", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Próxima disponible</div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: "#92400E" }}>{nextSurveyDate}</div>
               </div>
             </div>
@@ -2716,14 +2754,14 @@ function EncuestaSeguimiento() {
         <div style={{ background: "#EFF6FF", borderRadius: 10, padding: "14px 18px", marginBottom: 28, display: "flex", gap: 10, alignItems: "flex-start" }}>
           <AlertCircle size={17} color="#2563EB" style={{ marginTop: 1, flexShrink: 0 }} />
           <p style={{ fontSize: 13, color: "#1E40AF", margin: 0, lineHeight: 1.65 }}>
-            Los datos se registran en <strong>encuesta_seguimiento</strong> y se vinculan mediante <strong>seguimiento_egresado</strong> (id_encuesta, id_egresado, fecha_asociacion). Tu información es confidencial.
+            Tu información es confidencial y se usará para el seguimiento académico y laboral.
           </p>
         </div>
 
         <fieldset disabled={!canSubmit} style={{ border: "none", padding: 0, margin: 0, opacity: canSubmit ? 1 : 0.55 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
             <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>estado_laboral (VARCHAR 50) <span style={{ color: "#EF4444" }}>*</span></label>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Estado laboral <span style={{ color: "#EF4444" }}>*</span></label>
               <select name="estado_laboral" style={INP} defaultValue={encuesta?.estado_laboral ?? "Seleccionar..."}>
                 <option>Seleccionar...</option>
                 <option>Empleado</option>
@@ -2734,23 +2772,23 @@ function EncuestaSeguimiento() {
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>nombre_empresa_actual (VARCHAR 150)</label>
-              <input name="nombre_empresa_actual" style={INP} placeholder="nullable — dejar vacío si desempleado" defaultValue={encuesta?.nombre_empresa_actual ?? ""} />
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Empresa actual</label>
+              <input name="nombre_empresa_actual" style={INP} placeholder="Dejar vacío si no aplica" defaultValue={encuesta?.nombre_empresa_actual ?? ""} />
             </div>
             <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>cargo_actual (VARCHAR 100)</label>
-              <input name="cargo_actual" style={INP} placeholder="nullable" defaultValue={encuesta?.cargo_actual ?? ""} />
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Cargo actual</label>
+              <input name="cargo_actual" style={INP} placeholder="Cargo o puesto actual" defaultValue={encuesta?.cargo_actual ?? ""} />
             </div>
             <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>area_trabajo (VARCHAR 100)</label>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Área de trabajo</label>
               <input name="area_trabajo" style={INP} placeholder="Ej: Logística, Salud, Tecnología..." defaultValue={encuesta?.area_trabajo ?? ""} />
             </div>
             <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>sueldo_mensual — DECIMAL(10,2) nullable</label>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Sueldo mensual</label>
               <input name="sueldo_mensual" style={INP} type="number" step="0.01" placeholder="Ej: 3500.00" defaultValue={encuesta?.sueldo_mensual ?? ""} />
             </div>
             <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>tipo_contrato (VARCHAR 50)</label>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Tipo de contrato</label>
               <select name="tipo_contrato" style={INP} defaultValue={encuesta?.tipo_contrato ?? "Seleccionar..."}>
                 <option>Seleccionar...</option>
                 <option>Indefinido</option>
@@ -2759,7 +2797,7 @@ function EncuestaSeguimiento() {
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>satisfaccion_profesional (VARCHAR 50)</label>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Satisfacción profesional</label>
               <select name="satisfaccion_profesional" style={INP} defaultValue={encuesta?.satisfaccion_profesional ?? "Seleccionar..."}>
                 <option>Seleccionar...</option>
                 <option>Muy Satisfecho</option>
@@ -2769,7 +2807,7 @@ function EncuestaSeguimiento() {
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>tiempo_conseguir_empleo (VARCHAR 50)</label>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Tiempo para conseguir empleo</label>
               <select name="tiempo_conseguir_empleo" style={INP} defaultValue={encuesta?.tiempo_conseguir_empleo ?? "Seleccionar..."}>
                 <option>Seleccionar...</option>
                 <option>1 mes</option>
@@ -2779,8 +2817,8 @@ function EncuestaSeguimiento() {
               </select>
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>observaciones (TEXT — nullable)</label>
-              <textarea name="observaciones" style={{ ...INP, height: 90, resize: "vertical" }} placeholder="observaciones opcionales..." defaultValue={encuesta?.observaciones ?? ""} />
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Observaciones</label>
+              <textarea name="observaciones" style={{ ...INP, height: 90, resize: "vertical" }} placeholder="Observaciones opcionales..." defaultValue={encuesta?.observaciones ?? ""} />
             </div>
           </div>
         </fieldset>
@@ -2799,18 +2837,23 @@ function EncuestaSeguimiento() {
   );
 }
 
-// ─── Notificaciones (todos los roles) ────────────────────────────────────────
-// tabla: notificacion — id_notificacion, id_usuario, titulo, mensaje, leido BOOLEAN, fecha_envio DATETIME
 function Notificaciones({ useApi = false, unreadTotal, onNotificationsChanged }: { useApi?: boolean; unreadTotal?: number; onNotificationsChanged?: () => void }) {
   const { toast } = useFeedback();
+  const [search, setSearch] = useState("");
+  const [estadoFiltro, setEstadoFiltro] = useState("Todas");
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
-  const fallback = paginatedFallback(NOTIFICACIONES_DATA as ApiNotificacion[], page);
+  const localNotificaciones = (NOTIFICACIONES_DATA as ApiNotificacion[]).filter(n => {
+    const q = search.toLowerCase();
+    const leida = n.leido === true || n.leido === 1;
+    return `${n.titulo} ${n.mensaje}`.toLowerCase().includes(q) && (estadoFiltro === "Todas" || (estadoFiltro === "Leídas" ? leida : !leida));
+  });
+  const fallback = paginatedFallback(localNotificaciones, page);
   const notifsPage = usePaginatedApiData(
     useApi,
-    () => adminApi.notificaciones({ page, pageSize: DEFAULT_PAGE_SIZE }),
+    () => adminApi.notificaciones({ page, pageSize: DEFAULT_PAGE_SIZE, search, estado: estadoFiltro }),
     fallback,
-    [useApi, page, refreshKey]
+    [useApi, page, search, estadoFiltro, refreshKey]
   );
   const apiNotifs = useApi ? notifsPage.items : fallback.items;
   const [notifs, setNotifs] = useState<ApiNotificacion[]>(apiNotifs);
@@ -2818,6 +2861,10 @@ function Notificaciones({ useApi = false, unreadTotal, onNotificationsChanged }:
   useEffect(() => {
     setNotifs(apiNotifs);
   }, [apiNotifs]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, estadoFiltro]);
 
   async function markRead(id: number) {
     if (useApi) {
@@ -2857,9 +2904,17 @@ function Notificaciones({ useApi = false, unreadTotal, onNotificationsChanged }:
     <div>
       <PageHeader
         title="Notificaciones"
-        subtitle={`Tabla: notificacion — id_usuario = sesión activa — ${unread} sin leer (leido = FALSE)`}
+        subtitle={`${unread} sin leer`}
         action={<Btn variant="outline" onClick={markAllRead}><CheckCircle size={14} /> Marcar todas leídas</Btn>}
       />
+      <Card style={{ maxWidth: 760, marginBottom: 12 }}>
+        <div style={{ padding: "14px 18px", display: "flex", gap: 10, alignItems: "center" }}>
+          <SearchBar value={search} onChange={setSearch} placeholder="Buscar por título o mensaje..." />
+          <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
+            <option>Todas</option><option>Leídas</option><option>No leídas</option>
+          </select>
+        </div>
+      </Card>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 760 }}>
         {notifs.length === 0 && (
           <Card style={{ padding: "18px 22px" }}>
@@ -2872,13 +2927,11 @@ function Notificaciones({ useApi = false, unreadTotal, onNotificationsChanged }:
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                   <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A" }}>{n.titulo}</div>
-                  <Badge label={n.leido ? "leido: TRUE" : "leido: FALSE"} variant={n.leido ? "neutral" : "info"} />
+                  <Badge label={n.leido ? "Leída" : "No leída"} variant={n.leido ? "neutral" : "info"} />
                 </div>
                 <div style={{ fontSize: 13, color: "#64748B", lineHeight: 1.65, marginBottom: 8 }}>{n.mensaje}</div>
                 <div style={{ fontSize: 11, color: "#94A3B8", display: "flex", alignItems: "center", gap: 6 }}>
-                  <Clock size={11} /> fecha_envio: {n.fecha_envio}
-                  <span style={{ marginLeft: 8 }}>· id_notificacion: {n.id_notificacion}</span>
-                  <span>· id_usuario: {n.id_usuario}</span>
+                  <Clock size={11} /> {n.fecha_envio}
                 </div>
               </div>
               {!n.leido && (
@@ -2891,7 +2944,7 @@ function Notificaciones({ useApi = false, unreadTotal, onNotificationsChanged }:
         ))}
       </div>
       <div style={{ maxWidth: 760, marginTop: 12 }}>
-        <Pagination total={useApi ? notifsPage.total : (NOTIFICACIONES_DATA as ApiNotificacion[]).length} showing={notifs.length} page={useApi ? notifsPage.page : page} pageSize={useApi ? notifsPage.pageSize : DEFAULT_PAGE_SIZE} onPageChange={setPage} />
+        <Pagination total={useApi ? notifsPage.total : localNotificaciones.length} showing={notifs.length} page={useApi ? notifsPage.page : page} pageSize={useApi ? notifsPage.pageSize : DEFAULT_PAGE_SIZE} onPageChange={setPage} />
       </div>
     </div>
   );
@@ -2975,7 +3028,7 @@ function Sidebar({ role, screen, setScreen, onLogout, unreadCount }: { role: Rol
           <div style={{ width: 32, height: 32, borderRadius: 8, background: "#2563EB", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 12, flexShrink: 0 }}>{avatars[role]}</div>
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>{userNames[role]}</div>
-            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.38)" }}>{roleLabel[role]} · tabla: usuario</div>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.38)" }}>{roleLabel[role]}</div>
           </div>
         </div>
         <button onClick={onLogout} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 10px", borderRadius: 8, border: "none", cursor: "pointer", background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.45)", fontSize: 12, fontFamily: "inherit" }}>

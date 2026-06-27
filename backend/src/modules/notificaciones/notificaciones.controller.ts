@@ -6,7 +6,7 @@ import {
   markAllNotificacionesLeidas,
   markNotificacionLeida,
 } from "./notificaciones.service.js";
-import { getPagination } from "../../utils/pagination.js";
+import { getExactFilter, getPagination, getStringFilter } from "../../utils/pagination.js";
 import type { ResultSetHeader } from "mysql2";
 
 function parsePositiveId(value: string | undefined): number | null {
@@ -23,7 +23,10 @@ export const notificacionesController = {
       return;
     }
 
-    const data = await listNotificaciones(auth.id_usuario, getPagination(_req.query));
+    const data = await listNotificaciones(auth.id_usuario, getPagination(_req.query), {
+      search: getStringFilter(_req.query.search),
+      estado: getExactFilter(_req.query.estado, "Todas"),
+    });
     res.json({ ok: true, data });
   }),
 

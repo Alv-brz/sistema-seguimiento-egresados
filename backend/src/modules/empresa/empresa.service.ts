@@ -2,6 +2,7 @@ import { pool } from "../../config/db.js";
 import type { PaginatedResult, PaginationInput } from "../../utils/pagination.js";
 
 export type EmpresaOfertasFilters = {
+  search?: string;
   estado?: string;
   modalidad?: string;
 };
@@ -143,6 +144,12 @@ export async function listEmpresaOfertas(
 ): Promise<PaginatedResult<unknown>> {
   const where = ["o.id_empresa = ?"];
   const params: unknown[] = [idEmpresa];
+
+  if (filters.search) {
+    where.push("(o.titulo LIKE ? OR o.puesto LIKE ? OR o.area LIKE ? OR o.ubicacion LIKE ?)");
+    const q = `%${filters.search}%`;
+    params.push(q, q, q, q);
+  }
 
   if (filters.estado) {
     where.push("o.estado_oferta = ?");

@@ -3,8 +3,8 @@ import type { PaginatedResult, PaginationInput } from "../../utils/pagination.js
 
 export type EgresadosFilters = {
   search?: string;
-  facultad?: string;
-  sexo?: string;
+  carrera?: string;
+  estado?: string;
 };
 
 export type AdminEgresadoInput = {
@@ -31,20 +31,20 @@ export async function listEgresados(
 
   if (filters.search) {
     where.push(
-      "(e.dni LIKE ? OR e.nombre_egresado LIKE ? OR e.apellidos_egresado LIKE ? OR c.nombre_carrera LIKE ?)"
+      "(e.dni LIKE ? OR e.nombre_egresado LIKE ? OR e.apellidos_egresado LIKE ? OR c.nombre_carrera LIKE ? OR u.correo LIKE ?)"
     );
     const q = `%${filters.search}%`;
-    params.push(q, q, q, q);
+    params.push(q, q, q, q, q);
   }
 
-  if (filters.facultad) {
-    where.push("f.nombre_facultad = ?");
-    params.push(filters.facultad);
+  if (filters.carrera) {
+    where.push("c.nombre_carrera = ?");
+    params.push(filters.carrera);
   }
 
-  if (filters.sexo) {
-    where.push("e.sexo = ?");
-    params.push(filters.sexo);
+  if (filters.estado) {
+    where.push("u.estado_usuario = ?");
+    params.push(filters.estado);
   }
 
   const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
@@ -52,6 +52,7 @@ export async function listEgresados(
   const [countRows] = await pool.query(
     `SELECT COUNT(*) AS total
      FROM egresado e
+     INNER JOIN usuario u ON u.id_usuario = e.id_usuario
      INNER JOIN carrera c ON c.id_carrera = e.id_carrera
      INNER JOIN facultad f ON f.id_facultad = c.id_facultad
      ${whereSql}`,

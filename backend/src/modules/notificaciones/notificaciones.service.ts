@@ -1,13 +1,35 @@
 import { pool } from "../../config/db.js";
 import type { PaginatedResult, PaginationInput } from "../../utils/pagination.js";
 
+export type NotificacionesFilters = {
+  search?: string;
+  estado?: string;
+};
+
 export async function listNotificaciones(
   id_usuario: number,
-  pagination: PaginationInput
+  pagination: PaginationInput,
+  filters: NotificacionesFilters
 ): Promise<PaginatedResult<unknown>> {
+  const where = ["id_usuario = ?"];
+  const params: (string | number | boolean)[] = [id_usuario];
+
+  if (filters.search) {
+    where.push("(titulo LIKE ? OR mensaje LIKE ?)");
+    const q = `%${filters.search}%`;
+    params.push(q, q);
+  }
+
+  if (filters.estado === "Leídas") {
+    where.push("leido = TRUE");
+  } else if (filters.estado === "No leídas") {
+    where.push("leido = FALSE");
+  }
+
+  const whereSql = `WHERE ${where.join(" AND ")}`;
   const [countRows] = await pool.execute(
-    "SELECT COUNT(*) AS total FROM notificacion WHERE id_usuario = ?",
-    [id_usuario]
+    `SELECT COUNT(*) AS total FROM notificacion ${whereSql}`,
+    params
   );
 
   const [rows] = await pool.query(
@@ -19,10 +41,10 @@ export async function listNotificaciones(
        leido,
        fecha_envio
      FROM notificacion
-     WHERE id_usuario = ?
+     ${whereSql}
      ORDER BY fecha_envio DESC, id_notificacion DESC
      LIMIT ? OFFSET ?`,
-    [id_usuario, pagination.pageSize, pagination.offset]
+    [...params, pagination.pageSize, pagination.offset]
   );
 
   return {

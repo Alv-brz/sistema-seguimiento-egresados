@@ -27,6 +27,7 @@ Estado aprobado al 2026-06-26:
 - Restauracion de ultima pantalla valida por rol al refrescar la pagina con sesion activa.
 - CRUD Administrador Fase A implementado para configuracion del sistema, egresados, empresas y ofertas.
 - Ajuste de coherencia previo a CRUD Administrador Fase B implementado: encuestas sin eliminacion, cuentas admin desactivables/reactivables y ofertas no eliminables si tienen postulaciones.
+- Mejora general de usabilidad implementada: buscadores server-side en listados grandes, filtros visibles reducidos a los utiles y limpieza de etiquetas tecnicas SQL en formularios/vistas principales.
 
 ## Fases Implementadas
 
@@ -523,6 +524,52 @@ Verificacion realizada:
 - Prueba HTTP real: oferta con 44 postulaciones asociadas responde 409 con el mensaje requerido.
 - Prueba HTTP real: oferta temporal sin postulaciones se crea y elimina correctamente.
 
+### Fase 13 - Mejora de Usabilidad: Buscadores, Filtros y Etiquetas
+
+Estado: implementada en esta sesion, pendiente de aprobacion del usuario antes de iniciar CRUD Administrador Fase B.
+
+Incluye:
+
+- Busqueda server-side agregada o normalizada en listados grandes de administrador: egresados, empresas, ofertas laborales, encuestas, auditoria y notificaciones.
+- Busqueda server-side agregada o normalizada en listados de empresa: mis ofertas y postulaciones recibidas.
+- Busqueda server-side agregada o normalizada en listados de egresado: bolsa laboral, mis postulaciones e historial laboral.
+- Los buscadores mantienen paginacion real, filtros existentes utiles y resetean a pagina 1 al cambiar.
+- Estados vacios visibles cuando una busqueda/filtro no devuelve resultados.
+- Filtros visibles reducidos a los utiles: carrera/estado de usuario, sector/estado de usuario, estado/modalidad, estado de postulacion, estado laboral, accion/tabla afectada, todas/leidas/no leidas y actual/no actual en historial.
+- Limpieza de etiquetas visibles en formularios y detalles principales para evitar tipos SQL, nombres de columnas y ayudas tecnicas.
+- Auditoria conserva valores internos para consulta, pero muestra acciones legibles como Crear, Actualizar y Eliminar.
+- No se modifico `Database/`, estilos globales, diseno general, JWT, roles, auditoria ni validaciones `SIGNAL`.
+
+Archivos modificados:
+
+- `backend/src/modules/egresados/egresados.controller.ts`
+- `backend/src/modules/egresados/egresados.service.ts`
+- `backend/src/modules/empresas/empresas.controller.ts`
+- `backend/src/modules/empresas/empresas.service.ts`
+- `backend/src/modules/ofertas/ofertas.controller.ts`
+- `backend/src/modules/ofertas/ofertas.service.ts`
+- `backend/src/modules/encuestas/encuestas.controller.ts`
+- `backend/src/modules/encuestas/encuestas.service.ts`
+- `backend/src/modules/empresa/empresa.controller.ts`
+- `backend/src/modules/empresa/empresa.service.ts`
+- `backend/src/modules/egresado/egresado.controller.ts`
+- `backend/src/modules/egresado/egresado.service.ts`
+- `backend/src/modules/notificaciones/notificaciones.controller.ts`
+- `backend/src/modules/notificaciones/notificaciones.service.ts`
+- `src/app/api.ts`
+- `src/app/App.tsx`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+Verificacion realizada:
+
+- `npm.cmd run build` en `backend/`: correcto.
+- `npm.cmd run build` en frontend: correcto tras ejecutar fuera del sandbox por restriccion de acceso en la ruta de OneDrive; Vite solo reporto advertencia de chunk grande.
+- Prueba HTTP real con JWT admin: busqueda/filtros en egresados, empresas, ofertas, encuestas, auditoria y notificaciones.
+- Prueba HTTP real con JWT empresa: busqueda/filtros en mis ofertas y postulaciones recibidas.
+- Prueba HTTP real con JWT egresado: busqueda/filtros en bolsa laboral, mis postulaciones e historial laboral.
+- Revision de interfaz en `src/app/App.tsx`: formularios principales y vistas solicitadas usan etiquetas amigables; las coincidencias tecnicas restantes son nombres internos de propiedades, datos mock o comentarios de desarrollo, no textos de ayuda visibles.
+
 ## Funcionalidades Terminadas
 
 - Aplicacion frontend arranca con Vite.
@@ -579,6 +626,9 @@ Verificacion realizada:
 - Gestion de encuestas de administrador como historico solo lectura/detalle, sin eliminacion.
 - Desactivar/reactivar cuentas de egresados y empresas desde administrador.
 - Bloqueo explicito de eliminacion de ofertas con postulaciones asociadas desde administrador.
+- Buscadores server-side en listados grandes de administrador, empresa y egresado.
+- Filtros visibles reducidos a los necesarios por modulo.
+- Etiquetas y ayudas visibles limpiadas para evitar tipos SQL y nombres tecnicos en la interfaz.
 
 ## Funcionalidades Pendientes
 
@@ -591,7 +641,7 @@ Verificacion realizada:
 
 ## Fases Pendientes Recomendadas
 
-### Fase 13 - Validacion de Sesion
+### Fase 14 - Validacion de Sesion
 
 Objetivo:
 
@@ -605,7 +655,7 @@ Archivos probables:
 - `src/app/api.ts`
 - `src/app/App.tsx`
 
-### Fase 14 - CRUD Administrador Fase B
+### Fase 15 - CRUD Administrador Fase B
 
 Objetivo:
 
@@ -613,7 +663,7 @@ Objetivo:
 - Usar procedimientos almacenados existentes si calzan.
 - Respetar triggers y errores `SIGNAL`.
 
-### Fase 15 - Modularizacion Frontend
+### Fase 16 - Modularizacion Frontend
 
 Objetivo:
 
@@ -623,7 +673,7 @@ Objetivo:
 
 ## Ultimo Estado Aprobado
 
-Fecha: 2026-06-26.
+Fecha: 2026-06-27.
 
 Estado:
 
@@ -638,9 +688,10 @@ Estado:
 - CRUD Egresado queda cerrado funcionalmente y espera aprobacion del usuario antes de iniciar CRUD Administrador.
 - CRUD Administrador Fase A queda implementado.
 - Ajuste de coherencia de acciones queda implementado y espera aprobacion del usuario antes de iniciar CRUD Administrador Fase B.
+- Mejora de usabilidad de buscadores, filtros y etiquetas queda implementada y espera aprobacion del usuario antes de iniciar CRUD Administrador Fase B.
 - Refresco de pagina restaura la ultima pantalla valida del rol autenticado.
 - Sistema global de mensajes y confirmaciones activo en toda la aplicacion; no quedan ventanas nativas del navegador.
-- Listados admin tienen paginacion/filtros reales.
+- Listados admin, empresa y egresado principales tienen paginacion, busqueda y filtros reales donde corresponde.
 - Acciones de escritura/exportacion no implementadas fuera de Empresa, Egresado y Administrador Fase A muestran aviso de fase CRUD.
 - Base de datos intacta.
 - Proxima fase recomendada: esperar aprobacion; luego validacion de sesion o CRUD Administrador Fase B si el usuario lo autoriza.

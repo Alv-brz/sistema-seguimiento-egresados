@@ -2,6 +2,7 @@ import { pool } from "../../config/db.js";
 import type { PaginatedResult, PaginationInput } from "../../utils/pagination.js";
 
 export type EncuestasFilters = {
+  search?: string;
   estadoLaboral?: string;
 };
 
@@ -11,6 +12,12 @@ export async function listEncuestas(
 ): Promise<PaginatedResult<unknown>> {
   const where: string[] = [];
   const params: unknown[] = [];
+
+  if (filters.search) {
+    where.push("(e.nombre_egresado LIKE ? OR e.apellidos_egresado LIKE ? OR es.nombre_empresa_actual LIKE ? OR es.cargo_actual LIKE ? OR es.area_trabajo LIKE ?)");
+    const q = `%${filters.search}%`;
+    params.push(q, q, q, q, q);
+  }
 
   if (filters.estadoLaboral) {
     where.push("es.estado_laboral = ?");

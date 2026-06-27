@@ -213,6 +213,7 @@ export const egresadoController = {
     }
 
     const data = await listEgresadoPostulaciones(idEgresado, getPagination(req.query), {
+      search: getStringFilter(req.query.search),
       estado: getExactFilter(req.query.estado, "Todos"),
     });
     res.json({ ok: true, data });
@@ -255,7 +256,10 @@ export const egresadoController = {
       return;
     }
 
-    const data = await listHistorialLaboral(idEgresado, getPagination(req.query));
+    const data = await listHistorialLaboral(idEgresado, getPagination(req.query), {
+      search: getStringFilter(req.query.search),
+      actual: getExactFilter(req.query.actual, "Todos"),
+    });
     res.json({ ok: true, data });
   }),
 

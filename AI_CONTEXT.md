@@ -207,7 +207,11 @@ La capa frontend reutilizable esta en `src/app/api.ts`:
 - Las pantallas empresa usan datos reales filtrados por el `id_usuario` del JWT.
 - Las pantallas egresado usan datos reales filtrados por el `id_usuario` del JWT.
 - Los listados admin consumen respuestas paginadas `{ items, total, page, pageSize }`.
-- Los filtros visibles en listados admin se envian como query params al backend.
+- Los buscadores y filtros visibles en listados grandes se envian como query params al backend y deben resetear la pagina a 1 al cambiar.
+- Los listados admin con busqueda real son egresados, empresas, ofertas, encuestas, auditoria y notificaciones.
+- Los listados empresa con busqueda real son mis ofertas y postulaciones recibidas.
+- Los listados egresado con busqueda real son bolsa laboral, mis postulaciones e historial laboral.
+- Filtros utiles actuales: egresados por carrera/estado de usuario; empresas por sector/estado de usuario; ofertas por estado/modalidad; postulaciones por estado; encuestas por estado laboral; auditoria por accion/tabla afectada; notificaciones por todas/leidas/no leidas; historial laboral por actual/no actual.
 
 ## Modelo de Autenticacion
 
@@ -409,6 +413,7 @@ Backend:
 - Usar `requireAuth` y `requireRole` en rutas protegidas.
 - Las fases de lectura solo permiten `SELECT`; la excepcion aprobada es CRUD Empresa para ofertas, postulaciones propias y perfil propio.
 - Los endpoints de listados devuelven objetos paginados con `items`, `total`, `page` y `pageSize`.
+- Mantener buscadores server-side en listados grandes usando campos relevantes y consultas parametrizadas; no filtrar solo en frontend cuando existe endpoint real.
 - Para CRUD Empresa, toda escritura debe usar `res.locals.auth.id_usuario` y validar propiedad con `WHERE ... id_empresa = ?` o joins equivalentes.
 
 Base de datos:
@@ -471,6 +476,8 @@ Base de datos:
 - El badge rojo del menu de notificaciones usa el contador real de no leidas y se oculta cuando el contador es 0.
 - Los errores SQL `SIGNAL` se traducen a HTTP 422, duplicados a 409 e integridad referencial a 409.
 - `configuracion_sistema` es singleton con `id_configuracion = 1`; sus validaciones de correo, meses y estado dependen de triggers `SIGNAL`.
+- La UI no debe mostrar etiquetas tecnicas SQL, tipos de columna ni nombres internos como ayuda de usuario. Usar etiquetas amigables como Titulo, Descripcion, Puesto, Area, Ubicacion, Modalidad, Tipo de contrato, Salario, Requisitos, Fecha de cierre, Correo, Telefono, Direccion, DNI, Sexo, Facultad, Carrera y Estado.
+- Las ayudas visibles deben ser orientadas al usuario, por ejemplo maximos de caracteres, campo obligatorio/opcional, disponibilidad inmediata con `0` meses o validaciones de fecha.
 
 ## Protocolo Para Futuras Fases
 

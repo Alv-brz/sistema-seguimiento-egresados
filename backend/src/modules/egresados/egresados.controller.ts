@@ -91,8 +91,8 @@ export const egresadosController = {
   list: asyncHandler(async (_req: Request, res: Response) => {
     const data = await listEgresados(getPagination(_req.query), {
       search: getStringFilter(_req.query.search),
-      facultad: getExactFilter(_req.query.facultad, "Todas"),
-      sexo: getExactFilter(_req.query.sexo, "Todos"),
+      carrera: getExactFilter(_req.query.carrera, "Todas"),
+      estado: getExactFilter(_req.query.estado, "Todos"),
     });
     res.json({ ok: true, data });
   }),

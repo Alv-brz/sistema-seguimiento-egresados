@@ -8,7 +8,13 @@ export type BolsaFilters = {
 };
 
 export type EgresadoPostulacionesFilters = {
+  search?: string;
   estado?: string;
+};
+
+export type HistorialLaboralFilters = {
+  search?: string;
+  actual?: string;
 };
 
 export type EgresadoPerfilInput = {
@@ -269,7 +275,13 @@ export async function listEgresadoPostulaciones(
   filters: EgresadoPostulacionesFilters
 ): Promise<PaginatedResult<unknown>> {
   const where = ["p.id_egresado = ?"];
-  const params: unknown[] = [idEgresado];
+  const params: (string | number | boolean)[] = [idEgresado];
+
+  if (filters.search) {
+    where.push("(o.titulo LIKE ? OR em.razon_social LIKE ? OR p.observaciones LIKE ?)");
+    const q = `%${filters.search}%`;
+    params.push(q, q, q);
+  }
 
   if (filters.estado) {
     where.push("p.estado_postulacion = ?");
@@ -280,6 +292,8 @@ export async function listEgresadoPostulaciones(
   const [countRows] = await pool.query(
     `SELECT COUNT(*) AS total
      FROM postulacion p
+     INNER JOIN oferta_laboral o ON o.id_oferta = p.id_oferta
+     INNER JOIN empresa em ON em.id_usuario = o.id_empresa
      ${whereSql}`,
     params
   );
@@ -312,11 +326,28 @@ export async function listEgresadoPostulaciones(
 
 export async function listHistorialLaboral(
   idEgresado: number,
-  pagination: PaginationInput
+  pagination: PaginationInput,
+  filters: HistorialLaboralFilters
 ): Promise<PaginatedResult<unknown>> {
+  const where = ["id_egresado = ?"];
+  const params: (string | number | boolean)[] = [idEgresado];
+
+  if (filters.search) {
+    where.push("(nombre_empresa LIKE ? OR cargo LIKE ? OR modalidad LIKE ?)");
+    const q = `%${filters.search}%`;
+    params.push(q, q, q);
+  }
+
+  if (filters.actual === "true") {
+    where.push("actual = TRUE");
+  } else if (filters.actual === "false") {
+    where.push("actual = FALSE");
+  }
+
+  const whereSql = `WHERE ${where.join(" AND ")}`;
   const [countRows] = await pool.execute(
-    "SELECT COUNT(*) AS total FROM historial_laboral WHERE id_egresado = ?",
-    [idEgresado]
+    `SELECT COUNT(*) AS total FROM historial_laboral ${whereSql}`,
+    params
   );
 
   const [rows] = await pool.query(
@@ -330,10 +361,10 @@ export async function listHistorialLaboral(
        modalidad,
        actual
      FROM historial_laboral
-     WHERE id_egresado = ?
+     ${whereSql}
      ORDER BY fecha_inicio DESC, id_historial DESC
      LIMIT ? OFFSET ?`,
-    [idEgresado, pagination.pageSize, pagination.offset]
+    [...params, pagination.pageSize, pagination.offset]
   );
 
   return {

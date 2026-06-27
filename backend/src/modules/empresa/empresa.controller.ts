@@ -145,6 +145,7 @@ export const empresaController = {
     }
 
     const data = await listEmpresaOfertas(idEmpresa, getPagination(req.query), {
+      search: getStringFilter(req.query.search),
       estado: getExactFilter(req.query.estado, "Todos"),
       modalidad: getExactFilter(req.query.modalidad, "Todos"),
     });

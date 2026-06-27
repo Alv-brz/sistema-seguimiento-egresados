@@ -4,6 +4,7 @@ import type { PaginatedResult, PaginationInput } from "../../utils/pagination.js
 export type EmpresasFilters = {
   search?: string;
   sector?: string;
+  estado?: string;
 };
 
 export type AdminEmpresaInput = {
@@ -28,14 +29,19 @@ export async function listEmpresas(
   const params: unknown[] = [];
 
   if (filters.search) {
-    where.push("(em.razon_social LIKE ? OR em.ruc LIKE ? OR em.sector LIKE ?)");
+    where.push("(em.razon_social LIKE ? OR em.nombre_comercial LIKE ? OR em.ruc LIKE ? OR em.sector LIKE ? OR u.correo LIKE ?)");
     const q = `%${filters.search}%`;
-    params.push(q, q, q);
+    params.push(q, q, q, q, q);
   }
 
   if (filters.sector) {
     where.push("em.sector = ?");
     params.push(filters.sector);
+  }
+
+  if (filters.estado) {
+    where.push("u.estado_usuario = ?");
+    params.push(filters.estado);
   }
 
   const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
