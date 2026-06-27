@@ -1,7 +1,16 @@
 import { pool } from "../../config/db.js";
+import type { PaginatedResult, PaginationInput } from "../../utils/pagination.js";
 
-export async function listNotificaciones(id_usuario: number) {
-  const [rows] = await pool.execute(
+export async function listNotificaciones(
+  id_usuario: number,
+  pagination: PaginationInput
+): Promise<PaginatedResult<unknown>> {
+  const [countRows] = await pool.execute(
+    "SELECT COUNT(*) AS total FROM notificacion WHERE id_usuario = ?",
+    [id_usuario]
+  );
+
+  const [rows] = await pool.query(
     `SELECT
        id_notificacion,
        id_usuario,
@@ -12,9 +21,14 @@ export async function listNotificaciones(id_usuario: number) {
      FROM notificacion
      WHERE id_usuario = ?
      ORDER BY fecha_envio DESC, id_notificacion DESC
-     LIMIT 100`,
-    [id_usuario]
+     LIMIT ? OFFSET ?`,
+    [id_usuario, pagination.pageSize, pagination.offset]
   );
 
-  return rows;
+  return {
+    items: rows,
+    total: Number((countRows as { total: number }[])[0]?.total ?? 0),
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+  };
 }

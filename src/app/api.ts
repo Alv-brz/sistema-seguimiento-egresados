@@ -13,6 +13,28 @@ type ApiFailure = {
   error?: string;
 };
 
+export type PaginatedResponse<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+type ListParams = {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  facultad?: string;
+  sexo?: string;
+  sector?: string;
+  estado?: string;
+  modalidad?: string;
+  estadoLaboral?: string;
+  tabla?: string;
+  accion?: string;
+  contrato?: string;
+};
+
 export type AdminDashboardData = {
   counts: {
     totalEgresados: number;
@@ -115,6 +137,87 @@ export type ApiNotificacion = {
   fecha_envio: string;
 };
 
+export type EmpresaPostulacion = {
+  id_postulacion: number;
+  egresado: string;
+  carrera: string;
+  oferta: string;
+  empresa: string;
+  fecha_postulacion: string;
+  estado_postulacion: string;
+  observaciones: string | null;
+  cv_adjunto: string | null;
+};
+
+export type EmpresaDashboardData = {
+  profile: AdminEmpresa | null;
+  counts: {
+    totalOfertas: number;
+    ofertasActivas: number;
+    ofertasCerradas: number;
+    totalPostulaciones: number;
+    postulacionesPendientes: number;
+    postulacionesAceptadas: number;
+    postulacionesRechazadas: number;
+    postulacionesEnProceso: number;
+  };
+  ofertasActivas: AdminOferta[];
+  ultimasPostulaciones: EmpresaPostulacion[];
+};
+
+export type EgresadoPerfil = AdminEgresado;
+
+export type EgresadoPostulacion = {
+  id_postulacion: number;
+  oferta: string;
+  empresa: string;
+  fecha_postulacion: string;
+  estado_postulacion: string;
+  observaciones: string | null;
+  cv_adjunto: string | null;
+};
+
+export type HistorialLaboralItem = {
+  id_historial: number;
+  nombre_empresa: string;
+  cargo: string;
+  fecha_inicio: string;
+  fecha_fin: string | null;
+  salario: number | null;
+  modalidad: string;
+  actual: boolean | number;
+};
+
+export type EgresadoEncuesta = {
+  id_encuesta: number;
+  fecha_registro: string;
+  estado_laboral: string;
+  nombre_empresa_actual: string | null;
+  cargo_actual: string | null;
+  area_trabajo: string | null;
+  sueldo_mensual: number | null;
+  tipo_contrato: string | null;
+  satisfaccion_profesional: string | null;
+  tiempo_conseguir_empleo: string | null;
+  observaciones: string | null;
+  fecha_asociacion: string;
+  proxima_disponible: string;
+  can_submit: boolean | number;
+};
+
+export type EgresadoDashboardData = {
+  profile: EgresadoPerfil | null;
+  metrics: {
+    totalPostulaciones: number;
+    estadoLaboralActual: string;
+    ultimaEmpresa: string;
+    ofertasActivas: number;
+    historialRegistrado: boolean;
+    encuestaCompletada: boolean;
+  };
+  ofertasRecomendadas: AdminOferta[];
+};
+
 export class ApiError extends Error {
   status: number;
   reason?: string;
@@ -127,7 +230,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
+export async function apiGet<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
   const session = readStoredSession();
   const headers: HeadersInit = { "Content-Type": "application/json" };
 
@@ -135,7 +238,16 @@ export async function apiGet<T>(path: string): Promise<T> {
     headers.Authorization = `Bearer ${session.token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, { headers });
+  const query = new URLSearchParams();
+
+  Object.entries(params ?? {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") {
+      query.set(key, String(value));
+    }
+  });
+
+  const url = `${API_BASE_URL}${path}${query.size > 0 ? `?${query.toString()}` : ""}`;
+  const response = await fetch(url, { headers });
   const payload = (await response.json()) as ApiSuccess<T> | ApiFailure;
 
   if (!response.ok || payload.ok !== true) {
@@ -151,10 +263,28 @@ export async function apiGet<T>(path: string): Promise<T> {
 
 export const adminApi = {
   dashboard: () => apiGet<AdminDashboardData>("/admin/dashboard"),
-  egresados: () => apiGet<AdminEgresado[]>("/egresados"),
-  empresas: () => apiGet<AdminEmpresa[]>("/empresas"),
-  ofertas: () => apiGet<AdminOferta[]>("/ofertas"),
-  encuestas: () => apiGet<AdminEncuesta[]>("/encuestas"),
-  auditoria: () => apiGet<AdminAuditoria[]>("/auditoria"),
-  notificaciones: () => apiGet<ApiNotificacion[]>("/notificaciones"),
+  egresados: (params?: ListParams) => apiGet<PaginatedResponse<AdminEgresado>>("/egresados", params),
+  empresas: (params?: ListParams) => apiGet<PaginatedResponse<AdminEmpresa>>("/empresas", params),
+  ofertas: (params?: ListParams) => apiGet<PaginatedResponse<AdminOferta>>("/ofertas", params),
+  encuestas: (params?: ListParams) => apiGet<PaginatedResponse<AdminEncuesta>>("/encuestas", params),
+  auditoria: (params?: ListParams) => apiGet<PaginatedResponse<AdminAuditoria>>("/auditoria", params),
+  notificaciones: (params?: ListParams) => apiGet<PaginatedResponse<ApiNotificacion>>("/notificaciones", params),
+};
+
+export const empresaApi = {
+  dashboard: () => apiGet<EmpresaDashboardData>("/empresa/dashboard"),
+  ofertas: (params?: ListParams) => apiGet<PaginatedResponse<AdminOferta>>("/empresa/ofertas", params),
+  postulaciones: (params?: ListParams) => apiGet<PaginatedResponse<EmpresaPostulacion>>("/empresa/postulaciones", params),
+  perfil: () => apiGet<AdminEmpresa | null>("/empresa/perfil"),
+  notificaciones: (params?: ListParams) => apiGet<PaginatedResponse<ApiNotificacion>>("/notificaciones", params),
+};
+
+export const egresadoApi = {
+  dashboard: () => apiGet<EgresadoDashboardData>("/egresado/dashboard"),
+  bolsa: (params?: ListParams) => apiGet<PaginatedResponse<AdminOferta>>("/egresado/bolsa", params),
+  postulaciones: (params?: ListParams) => apiGet<PaginatedResponse<EgresadoPostulacion>>("/egresado/postulaciones", params),
+  perfil: () => apiGet<EgresadoPerfil | null>("/egresado/perfil"),
+  historial: (params?: ListParams) => apiGet<PaginatedResponse<HistorialLaboralItem>>("/egresado/historial", params),
+  encuesta: () => apiGet<EgresadoEncuesta | null>("/egresado/encuesta"),
+  notificaciones: (params?: ListParams) => apiGet<PaginatedResponse<ApiNotificacion>>("/notificaciones", params),
 };

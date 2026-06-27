@@ -22,6 +22,8 @@ import {
 } from "./auth";
 import {
   adminApi,
+  egresadoApi,
+  empresaApi,
   type AdminAuditoria,
   type AdminDashboardData,
   type AdminEgresado,
@@ -29,6 +31,14 @@ import {
   type AdminEncuesta,
   type AdminOferta,
   type ApiNotificacion,
+  type EmpresaDashboardData,
+  type EmpresaPostulacion,
+  type EgresadoDashboardData,
+  type EgresadoEncuesta,
+  type EgresadoPerfil,
+  type EgresadoPostulacion,
+  type HistorialLaboralItem,
+  type PaginatedResponse,
 } from "./api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -223,6 +233,51 @@ const ADMIN_DASHBOARD_FALLBACK: AdminDashboardData = {
     postulacionesEvolucion: DATA_POST_EVOLUCION,
   },
 };
+const EMPRESA_DASHBOARD_FALLBACK: EmpresaDashboardData = {
+  profile: EMPRESAS[0],
+  counts: {
+    totalOfertas: 8,
+    ofertasActivas: 5,
+    ofertasCerradas: 3,
+    totalPostulaciones: 47,
+    postulacionesPendientes: 12,
+    postulacionesAceptadas: 0,
+    postulacionesRechazadas: 0,
+    postulacionesEnProceso: 0,
+  },
+  ofertasActivas: OFERTAS.filter(o => o.estado_oferta === "Activa"),
+  ultimasPostulaciones: POSTULACIONES,
+};
+const EGRESADO_PROFILE_FALLBACK = EGRESADOS[0] as EgresadoPerfil;
+const EGRESADO_DASHBOARD_FALLBACK: EgresadoDashboardData = {
+  profile: EGRESADO_PROFILE_FALLBACK,
+  metrics: {
+    totalPostulaciones: 3,
+    estadoLaboralActual: "Estudiando",
+    ultimaEmpresa: HISTORIAL_LABORAL[0]?.nombre_empresa ?? "Sin historial",
+    ofertasActivas: OFERTAS.filter(o => o.estado_oferta === "Activa").length,
+    historialRegistrado: true,
+    encuestaCompletada: false,
+  },
+  ofertasRecomendadas: OFERTAS.filter(o => o.estado_oferta === "Activa").slice(0, 3),
+};
+const DEFAULT_PAGE_SIZE = 10;
+const CRUD_PHASE_MESSAGE = "Función disponible en la fase de CRUD.";
+
+function unavailableCrudAction() {
+  window.alert(CRUD_PHASE_MESSAGE);
+}
+
+function paginatedFallback<T>(items: T[], page = 1, pageSize = DEFAULT_PAGE_SIZE): PaginatedResponse<T> {
+  const start = (page - 1) * pageSize;
+
+  return {
+    items: items.slice(start, start + pageSize),
+    total: items.length,
+    page,
+    pageSize,
+  };
+}
 
 // ─── Utility Components ───────────────────────────────────────────────────────
 type BadgeVariant = "success" | "danger" | "warning" | "info" | "neutral";
@@ -313,12 +368,15 @@ function SearchBar({ value, onChange, placeholder }: { value: string; onChange: 
   );
 }
 
-function Pagination({ total, showing }: { total: number; showing: number }) {
+function Pagination({ total, showing, page = 1, pageSize = DEFAULT_PAGE_SIZE, onPageChange }: { total: number; showing: number; page?: number; pageSize?: number; onPageChange?: (page: number) => void }) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const pages = Array.from(new Set([1, Math.max(1, page - 1), page, Math.min(totalPages, page + 1), totalPages])).filter(p => p >= 1 && p <= totalPages);
   return (
     <div style={{ padding: "12px 20px", borderTop: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
       <span style={{ fontSize: 13, color: "#64748B" }}>Mostrando {showing} de {total} registros</span>
       <div style={{ display: "flex", gap: 4 }}>
-        {["1", "2", "3", "→"].map((p, i) => <button key={i} style={{ padding: "4px 10px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 13, cursor: "pointer", background: p === "1" ? "#2563EB" : "#fff", color: p === "1" ? "#fff" : "#374151", fontFamily: "inherit" }}>{p}</button>)}
+        {pages.map((p) => <button key={p} onClick={() => onPageChange?.(p)} style={{ padding: "4px 10px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 13, cursor: "pointer", background: p === page ? "#2563EB" : "#fff", color: p === page ? "#fff" : "#374151", fontFamily: "inherit" }}>{p}</button>)}
+        <button onClick={() => onPageChange?.(Math.min(totalPages, page + 1))} style={{ padding: "4px 10px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 13, cursor: "pointer", background: "#fff", color: "#374151", fontFamily: "inherit" }}>→</button>
       </div>
     </div>
   );
@@ -394,6 +452,41 @@ function useApiData<T>(enabled: boolean, loader: () => Promise<T>, fallback: T):
       active = false;
     };
   }, [enabled, loader, fallback]);
+
+  return data;
+}
+
+function usePaginatedApiData<T>(
+  enabled: boolean,
+  loader: () => Promise<PaginatedResponse<T>>,
+  fallback: PaginatedResponse<T>,
+  deps: React.DependencyList
+): PaginatedResponse<T> {
+  const [data, setData] = useState<PaginatedResponse<T>>(fallback);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!enabled) {
+      setData(fallback);
+      return () => {
+        active = false;
+      };
+    }
+
+    loader()
+      .then((nextData) => {
+        if (active) setData(nextData);
+      })
+      .catch(() => {
+        if (active) setData(fallback);
+      });
+
+    return () => {
+      active = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, ...deps]);
 
   return data;
 }
@@ -620,20 +713,26 @@ function AdminDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // ─── ADMIN: Egresados ─────────────────────────────────────────────────────────
 function AdminEgresados() {
-  const egresados = useApiData(true, adminApi.egresados, EGRESADOS as AdminEgresado[]);
   const [search, setSearch] = useState("");
   const [facultadFiltro, setFacultadFiltro] = useState("Todas");
   const [sexoFiltro, setSexoFiltro] = useState("Todos");
   const [selected, setSelected] = useState<AdminEgresado | null>(null);
+  const [page, setPage] = useState(1);
+  const fallback = paginatedFallback(EGRESADOS as AdminEgresado[], page);
+  const egresadosPage = usePaginatedApiData(
+    true,
+    () => adminApi.egresados({ page, pageSize: DEFAULT_PAGE_SIZE, search, facultad: facultadFiltro, sexo: sexoFiltro }),
+    fallback,
+    [page, search, facultadFiltro, sexoFiltro]
+  );
+  const egresados = egresadosPage.items;
 
-  const filtered = egresados.filter(e => {
-    const q = search.toLowerCase();
-    const matchQ = `${e.nombre_egresado} ${e.apellidos_egresado} ${e.dni} ${e.nombre_carrera}`.toLowerCase().includes(q);
-    const matchF = facultadFiltro === "Todas" || e.nombre_facultad === facultadFiltro;
-    const matchS = sexoFiltro === "Todos" || e.sexo === sexoFiltro;
-    return matchQ && matchF && matchS;
-  });
-  const facultades = [...new Set(egresados.map(e => e.nombre_facultad))];
+  useEffect(() => {
+    setPage(1);
+  }, [search, facultadFiltro, sexoFiltro]);
+
+  const filtered = egresados;
+  const facultades = [...new Set((EGRESADOS as AdminEgresado[]).concat(egresados).map(e => e.nombre_facultad))];
 
   return (
     <div>
@@ -663,7 +762,7 @@ function AdminEgresados() {
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Gestión de Egresados" subtitle={`${egresados.length} registros en tabla egresado`} action={<Btn><Plus size={14} /> Nuevo Egresado</Btn>} />
+      <PageHeader title="Gestión de Egresados" subtitle={`${egresadosPage.total} registros en tabla egresado`} action={<Btn onClick={unavailableCrudAction}><Plus size={14} /> Nuevo Egresado</Btn>} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10, alignItems: "center" }}>
           <SearchBar value={search} onChange={setSearch} placeholder="Buscar por dni, nombre_egresado, apellidos_egresado..." />
@@ -694,8 +793,8 @@ function AdminEgresados() {
                   <TD>
                     <div style={{ display: "flex", gap: 2 }}>
                       <Btn variant="outline" small onClick={() => setSelected(e)}><Eye size={14} /></Btn>
-                      <Btn variant="ghost" small><Edit2 size={14} /></Btn>
-                      <Btn variant="danger" small><Trash2 size={14} /></Btn>
+                      <Btn variant="ghost" small onClick={unavailableCrudAction}><Edit2 size={14} /></Btn>
+                      <Btn variant="danger" small onClick={unavailableCrudAction}><Trash2 size={14} /></Btn>
                     </div>
                   </TD>
                 </tr>
@@ -703,7 +802,7 @@ function AdminEgresados() {
             </tbody>
           </table>
         </div>
-        <Pagination total={egresados.length} showing={filtered.length} />
+        <Pagination total={egresadosPage.total} showing={filtered.length} page={egresadosPage.page} pageSize={egresadosPage.pageSize} onPageChange={setPage} />
       </Card>
     </div>
   );
@@ -711,15 +810,23 @@ function AdminEgresados() {
 
 // ─── ADMIN: Empresas ──────────────────────────────────────────────────────────
 function AdminEmpresas() {
-  const empresas = useApiData(true, adminApi.empresas, EMPRESAS as AdminEmpresa[]);
   const [search, setSearch] = useState("");
   const [sectorFiltro, setSectorFiltro] = useState("Todos");
   const [selected, setSelected] = useState<AdminEmpresa | null>(null);
-  const filtered = empresas.filter(e => {
-    const q = search.toLowerCase();
-    return `${e.razon_social} ${e.ruc} ${e.sector}`.toLowerCase().includes(q) && (sectorFiltro === "Todos" || e.sector === sectorFiltro);
-  });
-  const sectores = [...new Set(empresas.map(e => e.sector))];
+  const [page, setPage] = useState(1);
+  const fallback = paginatedFallback(EMPRESAS as AdminEmpresa[], page);
+  const empresasPage = usePaginatedApiData(
+    true,
+    () => adminApi.empresas({ page, pageSize: DEFAULT_PAGE_SIZE, search, sector: sectorFiltro }),
+    fallback,
+    [page, search, sectorFiltro]
+  );
+  const filtered = empresasPage.items;
+  const sectores = [...new Set((EMPRESAS as AdminEmpresa[]).concat(filtered).map(e => e.sector))];
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, sectorFiltro]);
 
   return (
     <div>
@@ -741,7 +848,7 @@ function AdminEmpresas() {
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Gestión de Empresas" subtitle={`${empresas.length} registros en tabla empresa`} action={<Btn><Plus size={14} /> Nueva Empresa</Btn>} />
+      <PageHeader title="Gestión de Empresas" subtitle={`${empresasPage.total} registros en tabla empresa`} action={<Btn onClick={unavailableCrudAction}><Plus size={14} /> Nueva Empresa</Btn>} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
           <SearchBar value={search} onChange={setSearch} placeholder="Buscar por razon_social, ruc, sector..." />
@@ -765,15 +872,15 @@ function AdminEmpresas() {
                 <TD>
                   <div style={{ display: "flex", gap: 2 }}>
                     <Btn variant="outline" small onClick={() => setSelected(e)}><Eye size={14} /></Btn>
-                    <Btn variant="ghost" small><Edit2 size={14} /></Btn>
-                    <Btn variant="danger" small><Trash2 size={14} /></Btn>
+                    <Btn variant="ghost" small onClick={unavailableCrudAction}><Edit2 size={14} /></Btn>
+                    <Btn variant="danger" small onClick={unavailableCrudAction}><Trash2 size={14} /></Btn>
                   </div>
                 </TD>
               </tr>
             ))}
           </tbody>
         </table>
-        <Pagination total={empresas.length} showing={filtered.length} />
+        <Pagination total={empresasPage.total} showing={filtered.length} page={empresasPage.page} pageSize={empresasPage.pageSize} onPageChange={setPage} />
       </Card>
     </div>
   );
@@ -781,11 +888,24 @@ function AdminEmpresas() {
 
 // ─── ADMIN: Ofertas ───────────────────────────────────────────────────────────
 function AdminOfertas({ useApi = true }: { useApi?: boolean }) {
-  const ofertas = useApiData(useApi, adminApi.ofertas, OFERTAS as AdminOferta[]);
   const [selected, setSelected] = useState<AdminOferta | null>(null);
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
   const [modalidadFiltro, setModalidadFiltro] = useState("Todos");
-  const filtered = ofertas.filter(o => (estadoFiltro === "Todos" || o.estado_oferta === estadoFiltro) && (modalidadFiltro === "Todos" || o.modalidad === modalidadFiltro));
+  const [page, setPage] = useState(1);
+  const localOfertas = (OFERTAS as AdminOferta[]).filter(o => (estadoFiltro === "Todos" || o.estado_oferta === estadoFiltro) && (modalidadFiltro === "Todos" || o.modalidad === modalidadFiltro));
+  const fallback = paginatedFallback(localOfertas, page);
+  const remotePage = usePaginatedApiData(
+    true,
+    () => (useApi ? adminApi.ofertas : empresaApi.ofertas)({ page, pageSize: DEFAULT_PAGE_SIZE, estado: estadoFiltro, modalidad: modalidadFiltro }),
+    fallback,
+    [useApi, page, estadoFiltro, modalidadFiltro]
+  );
+  const ofertasPage = remotePage;
+  const filtered = ofertasPage.items;
+
+  useEffect(() => {
+    setPage(1);
+  }, [estadoFiltro, modalidadFiltro]);
 
   return (
     <div>
@@ -809,7 +929,7 @@ function AdminOfertas({ useApi = true }: { useApi?: boolean }) {
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Gestión de Ofertas Laborales" subtitle={`${ofertas.length} registros en tabla oferta_laboral`} action={<Btn><Plus size={14} /> Crear Oferta</Btn>} />
+      <PageHeader title="Gestión de Ofertas Laborales" subtitle={`${ofertasPage.total} registros en tabla oferta_laboral`} action={<Btn onClick={unavailableCrudAction}><Plus size={14} /> Crear Oferta</Btn>} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
           <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
@@ -837,8 +957,8 @@ function AdminOfertas({ useApi = true }: { useApi?: boolean }) {
                   <TD>
                     <div style={{ display: "flex", gap: 2 }}>
                       <Btn variant="outline" small onClick={() => setSelected(o)}><Eye size={14} /></Btn>
-                      <Btn variant="ghost" small><Edit2 size={14} /></Btn>
-                      <Btn variant="outline" small>Cerrar</Btn>
+                      <Btn variant="ghost" small onClick={unavailableCrudAction}><Edit2 size={14} /></Btn>
+                      <Btn variant="outline" small onClick={unavailableCrudAction}>Cerrar</Btn>
                     </div>
                   </TD>
                 </tr>
@@ -846,6 +966,7 @@ function AdminOfertas({ useApi = true }: { useApi?: boolean }) {
             </tbody>
           </table>
         </div>
+        <Pagination total={ofertasPage.total} showing={filtered.length} page={ofertasPage.page} pageSize={ofertasPage.pageSize} onPageChange={setPage} />
       </Card>
     </div>
   );
@@ -853,10 +974,22 @@ function AdminOfertas({ useApi = true }: { useApi?: boolean }) {
 
 // ─── ADMIN: Encuestas ─────────────────────────────────────────────────────────
 function AdminEncuestas() {
-  const encuestas = useApiData(true, adminApi.encuestas, ENCUESTAS as AdminEncuesta[]);
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AdminEncuesta | null>(null);
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
-  const filtered = encuestas.filter(e => estadoFiltro === "Todos" || e.estado_laboral === estadoFiltro);
+  const localEncuestas = (ENCUESTAS as AdminEncuesta[]).filter(e => estadoFiltro === "Todos" || e.estado_laboral === estadoFiltro);
+  const fallback = paginatedFallback(localEncuestas, page);
+  const encuestasPage = usePaginatedApiData(
+    true,
+    () => adminApi.encuestas({ page, pageSize: DEFAULT_PAGE_SIZE, estadoLaboral: estadoFiltro }),
+    fallback,
+    [page, estadoFiltro]
+  );
+  const filtered = encuestasPage.items;
+
+  useEffect(() => {
+    setPage(1);
+  }, [estadoFiltro]);
 
   return (
     <div>
@@ -881,7 +1014,7 @@ function AdminEncuestas() {
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Gestión de Encuestas" subtitle="Tablas: encuesta_seguimiento + seguimiento_egresado" action={<Btn variant="outline"><BarChart2 size={14} /> Generar Reporte</Btn>} />
+      <PageHeader title="Gestión de Encuestas" subtitle="Tablas: encuesta_seguimiento + seguimiento_egresado" action={<Btn variant="outline" onClick={unavailableCrudAction}><BarChart2 size={14} /> Generar Reporte</Btn>} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
           <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
@@ -904,13 +1037,14 @@ function AdminEncuestas() {
                 <TD>
                   <div style={{ display: "flex", gap: 2 }}>
                     <Btn variant="outline" small onClick={() => setSelected(e)}><Eye size={14} /></Btn>
-                    <Btn variant="ghost" small><Edit2 size={14} /></Btn>
+                    <Btn variant="ghost" small onClick={unavailableCrudAction}><Edit2 size={14} /></Btn>
                   </div>
                 </TD>
               </tr>
             ))}
           </tbody>
         </table>
+        <Pagination total={encuestasPage.total} showing={filtered.length} page={encuestasPage.page} pageSize={encuestasPage.pageSize} onPageChange={setPage} />
       </Card>
     </div>
   );
@@ -923,7 +1057,7 @@ function Reportes() {
   return (
     <div>
       <PageHeader title="Reportes y Estadísticas" subtitle="Información consolidada — Universidad de Huánuco (UDH)"
-        action={<div style={{ display: "flex", gap: 8 }}><Btn variant="outline"><Download size={14} /> Exportar PDF</Btn><Btn variant="success"><Download size={14} /> Exportar Excel</Btn></div>}
+        action={<div style={{ display: "flex", gap: 8 }}><Btn variant="outline" onClick={unavailableCrudAction}><Download size={14} /> Exportar PDF</Btn><Btn variant="success" onClick={unavailableCrudAction}><Download size={14} /> Exportar Excel</Btn></div>}
       />
       <Card style={{ padding: "16px 20px", marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -1064,7 +1198,7 @@ function Configuracion() {
           </div>
         </Card>
       </div>
-      <div style={{ marginTop: 24 }}><button style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Guardar Configuración</button></div>
+      <div style={{ marginTop: 24 }}><button onClick={unavailableCrudAction} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Guardar Configuración</button></div>
     </div>
   );
 }
@@ -1072,15 +1206,27 @@ function Configuracion() {
 // ─── ADMIN: Auditoría ─────────────────────────────────────────────────────────
 // tabla: auditoria — id_auditoria, tabla_afectada, accion, id_registro, descripcion, fecha_evento, usuario_bd
 function Auditoria() {
-  const auditoria = useApiData(true, adminApi.auditoria, AUDITORIA_DATA as AdminAuditoria[]);
   const [search, setSearch] = useState("");
   const [tablaFiltro, setTablaFiltro] = useState("Todas");
   const [accionFiltro, setAccionFiltro] = useState("Todas");
-  const filtered = auditoria.filter(a => {
+  const [page, setPage] = useState(1);
+  const localAuditoria = (AUDITORIA_DATA as AdminAuditoria[]).filter(a => {
     const q = search.toLowerCase();
     return `${a.descripcion} ${a.usuario_bd} ${a.tabla_afectada}`.toLowerCase().includes(q) && (tablaFiltro === "Todas" || a.tabla_afectada === tablaFiltro) && (accionFiltro === "Todas" || a.accion === accionFiltro);
   });
-  const tablas = [...new Set(auditoria.map(a => a.tabla_afectada))];
+  const fallback = paginatedFallback(localAuditoria, page);
+  const auditoriaPage = usePaginatedApiData(
+    true,
+    () => adminApi.auditoria({ page, pageSize: DEFAULT_PAGE_SIZE, search, tabla: tablaFiltro, accion: accionFiltro }),
+    fallback,
+    [page, search, tablaFiltro, accionFiltro]
+  );
+  const filtered = auditoriaPage.items;
+  const tablas = [...new Set((AUDITORIA_DATA as AdminAuditoria[]).concat(filtered).map(a => a.tabla_afectada))];
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, tablaFiltro, accionFiltro]);
 
   return (
     <div>
@@ -1117,7 +1263,7 @@ function Auditoria() {
             </tbody>
           </table>
         </div>
-        <Pagination total={auditoria.length} showing={filtered.length} />
+        <Pagination total={auditoriaPage.total} showing={filtered.length} page={auditoriaPage.page} pageSize={auditoriaPage.pageSize} onPageChange={setPage} />
       </Card>
     </div>
   );
@@ -1125,20 +1271,22 @@ function Auditoria() {
 
 // ─── EMPRESA: Dashboard ───────────────────────────────────────────────────────
 function EmpresaDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const dashboard = useApiData(true, empresaApi.dashboard, EMPRESA_DASHBOARD_FALLBACK);
+  const profile = dashboard.profile ?? EMPRESA_DASHBOARD_FALLBACK.profile;
   return (
     <div>
       <div style={{ background: "linear-gradient(135deg, #0A2647, #2563EB)", borderRadius: 14, padding: "26px 30px", marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 13, marginBottom: 4 }}>Panel de empresa</div>
-          <div style={{ color: "#fff", fontSize: 22, fontWeight: 700 }}>Finanzas Ugarte S.R.L.</div>
-          <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, marginTop: 4 }}>RUC: 20041779342 · Sector Salud</div>
+          <div style={{ color: "#fff", fontSize: 22, fontWeight: 700 }}>{profile?.razon_social ?? "Empresa"}</div>
+          <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, marginTop: 4 }}>RUC: {profile?.ruc ?? "—"} · Sector {profile?.sector ?? "—"}</div>
         </div>
-        <button onClick={() => setScreen("emp-crear-oferta")} style={{ padding: "11px 22px", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.28)", borderRadius: 10, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>+ Publicar Oferta</button>
+        <button onClick={unavailableCrudAction} style={{ padding: "11px 22px", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.28)", borderRadius: 10, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>+ Publicar Oferta</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 24 }}>
-        <StatCard icon={<Briefcase size={21} />} label="Ofertas Publicadas" value="8" sub="Total histórico" color="#2563EB" />
-        <StatCard icon={<CheckCircle size={21} />} label="Ofertas Activas" value="5" sub="3 próximas a cerrar" color="#10B981" />
-        <StatCard icon={<Users size={21} />} label="Postulaciones recibidas" value="47" sub="12 pendientes de revisión" color="#F59E0B" />
+        <StatCard icon={<Briefcase size={21} />} label="Ofertas Publicadas" value={dashboard.counts.totalOfertas.toLocaleString()} sub={`${dashboard.counts.ofertasCerradas.toLocaleString()} cerradas`} color="#2563EB" />
+        <StatCard icon={<CheckCircle size={21} />} label="Ofertas Activas" value={dashboard.counts.ofertasActivas.toLocaleString()} sub="estado_oferta = Activa" color="#10B981" />
+        <StatCard icon={<Users size={21} />} label="Postulaciones recibidas" value={dashboard.counts.totalPostulaciones.toLocaleString()} sub={`${dashboard.counts.postulacionesPendientes.toLocaleString()} pendientes de revisión`} color="#F59E0B" />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 18 }}>
         <Card style={{ padding: 24 }}>
@@ -1146,7 +1294,7 @@ function EmpresaDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
             Mis Ofertas (estado_oferta: Activa)
             <Btn variant="outline" small onClick={() => setScreen("admin-ofertas")}><Eye size={13} /> Ver todas</Btn>
           </div>
-          {OFERTAS.filter(o => o.estado_oferta === "Activa").slice(0, 4).map((o, i) => (
+          {dashboard.ofertasActivas.slice(0, 4).map((o, i) => (
             <div key={i} style={{ padding: "12px 0", borderBottom: i < 3 ? "1px solid #F1F5F9" : "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A" }}>{o.titulo}</div>
@@ -1161,7 +1309,7 @@ function EmpresaDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
             Últimas Postulaciones
             <Btn variant="outline" small onClick={() => setScreen("emp-postulaciones")}><Eye size={13} /> Ver todas</Btn>
           </div>
-          {POSTULACIONES.slice(0, 4).map((p, i) => (
+          {dashboard.ultimasPostulaciones.slice(0, 4).map((p, i) => (
             <div key={i} style={{ padding: "10px 0", borderBottom: i < 3 ? "1px solid #F1F5F9" : "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ fontWeight: 500, fontSize: 14, color: "#0F172A" }}>{p.egresado}</div>
@@ -1180,7 +1328,7 @@ function EmpresaDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
             { label: "Revisar Postulaciones", screen: "emp-postulaciones" as Screen, icon: <Users size={16} />, color: "#10B981" },
             { label: "Mis Ofertas", screen: "admin-ofertas" as Screen, icon: <Briefcase size={16} />, color: "#6366F1" },
           ].map(ql => (
-            <button key={ql.label} onClick={() => setScreen(ql.screen)} style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderRadius: 10, border: "1px solid #E2E8F0", background: "#F8FAFC", cursor: "pointer", fontFamily: "inherit" }}>
+            <button key={ql.label} onClick={() => ql.screen === "emp-crear-oferta" ? unavailableCrudAction() : setScreen(ql.screen)} style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderRadius: 10, border: "1px solid #E2E8F0", background: "#F8FAFC", cursor: "pointer", fontFamily: "inherit" }}>
               <div style={{ width: 34, height: 34, borderRadius: 8, background: ql.color + "18", display: "flex", alignItems: "center", justifyContent: "center", color: ql.color }}>{ql.icon}</div>
               <span style={{ fontSize: 13, fontWeight: 600, color: "#0F172A" }}>{ql.label}</span>
             </button>
@@ -1232,8 +1380,8 @@ function CrearOferta() {
           </div>
         </div>
         <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
-          <button style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Publicar Oferta</button>
-          <Btn variant="outline">Cancelar</Btn>
+          <button onClick={unavailableCrudAction} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Publicar Oferta</button>
+          <Btn variant="outline" onClick={unavailableCrudAction}>Cancelar</Btn>
         </div>
       </Card>
     </div>
@@ -1245,12 +1393,41 @@ function CrearOferta() {
 function PostulacionesRecibidas() {
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
-  const filtered = POSTULACIONES.filter(p => {
+  const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState<EmpresaPostulacion | null>(null);
+  const localPostulaciones = (POSTULACIONES as EmpresaPostulacion[]).filter(p => {
     const q = search.toLowerCase();
     return `${p.egresado} ${p.carrera}`.toLowerCase().includes(q) && (estadoFiltro === "Todos" || p.estado_postulacion === estadoFiltro);
   });
+  const fallback = paginatedFallback(localPostulaciones, page);
+  const postulacionesPage = usePaginatedApiData(
+    true,
+    () => empresaApi.postulaciones({ page, pageSize: DEFAULT_PAGE_SIZE, search, estado: estadoFiltro }),
+    fallback,
+    [page, search, estadoFiltro]
+  );
+  const filtered = postulacionesPage.items;
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, estadoFiltro]);
+
   return (
     <div>
+      {selected && (
+        <DetailModal title={`Postulación #${selected.id_postulacion} — ${selected.egresado}`} onClose={() => setSelected(null)}>
+          <DetailSection title="tabla: postulacion + oferta_laboral + egresado">
+            <DR label="id_postulacion" value={selected.id_postulacion} />
+            <DR label="egresado" value={selected.egresado} />
+            <DR label="carrera" value={selected.carrera} />
+            <DR label="oferta" value={selected.oferta} />
+            <DR label="fecha_postulacion" value={selected.fecha_postulacion} />
+            <DR label="estado_postulacion" value={selected.estado_postulacion} />
+            <DR label="cv_adjunto" value={selected.cv_adjunto} />
+            <DR label="observaciones" value={selected.observaciones} full />
+          </DetailSection>
+        </DetailModal>
+      )}
       <PageHeader title="Postulaciones Recibidas" subtitle="Tabla: postulacion — estado_postulacion: En Proceso | Aceptado | Pendiente | Rechazado" />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10, alignItems: "center" }}>
@@ -1276,16 +1453,16 @@ function PostulacionesRecibidas() {
                 <TD><span style={{ fontSize: 12, color: "#64748B" }}>{p.cv_adjunto}</span></TD>
                 <TD>
                   <div style={{ display: "flex", gap: 4 }}>
-                    <Btn variant="outline" small><FileText size={13} /> Ver CV</Btn>
-                    <button style={{ padding: "5px 10px", background: "#DCFCE7", border: "none", borderRadius: 7, cursor: "pointer" }}><CheckCircle size={13} color="#166534" /></button>
-                    <button style={{ padding: "5px 10px", background: "#FEE2E2", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 12, color: "#991B1B" }}>✕</button>
+                    <Btn variant="outline" small onClick={() => setSelected(p)}><FileText size={13} /> Ver CV</Btn>
+                    <button onClick={unavailableCrudAction} style={{ padding: "5px 10px", background: "#DCFCE7", border: "none", borderRadius: 7, cursor: "pointer" }}><CheckCircle size={13} color="#166534" /></button>
+                    <button onClick={unavailableCrudAction} style={{ padding: "5px 10px", background: "#FEE2E2", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 12, color: "#991B1B" }}>✕</button>
                   </div>
                 </TD>
               </tr>
             ))}
           </tbody>
         </table>
-        <Pagination total={POSTULACIONES.length} showing={filtered.length} />
+        <Pagination total={postulacionesPage.total} showing={filtered.length} page={postulacionesPage.page} pageSize={postulacionesPage.pageSize} onPageChange={setPage} />
       </Card>
     </div>
   );
@@ -1297,31 +1474,32 @@ function PostulacionesRecibidas() {
 // correo: NO existe en tabla empresa. Viene de usuario.correo via JOIN.
 // NOTA: la tabla empresa NO tiene campo `descripcion`.
 function PerfilEmpresa() {
+  const profile = useApiData(true, empresaApi.perfil, EMPRESAS[0] as AdminEmpresa | null) ?? EMPRESAS[0];
   return (
     <div>
       <PageHeader title="Perfil de Empresa" subtitle="Tabla: empresa + correo de usuario.correo (JOIN). Sin campo descripcion." />
-      <Card style={{ padding: 32, maxWidth: 820 }}>
+      <Card key={profile.id_usuario} style={{ padding: 32, maxWidth: 820 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-          <FormField label="RUC — CHAR(11)" required><input style={INP} defaultValue="20041779342" maxLength={11} /></FormField>
-          <FormField label="Razón social (VARCHAR 150)" required><input style={INP} defaultValue="Finanzas Ugarte S.R.L." /></FormField>
-          <FormField label="Nombre comercial (VARCHAR 150)"><input style={INP} defaultValue="Finanzas Ugarte" /></FormField>
+          <FormField label="RUC — CHAR(11)" required><input style={INP} defaultValue={profile.ruc} maxLength={11} /></FormField>
+          <FormField label="Razón social (VARCHAR 150)" required><input style={INP} defaultValue={profile.razon_social} /></FormField>
+          <FormField label="Nombre comercial (VARCHAR 150)"><input style={INP} defaultValue={profile.nombre_comercial ?? ""} /></FormField>
           <FormField label="Sector (VARCHAR 100)" required>
-            <select style={INP}>{["Salud", "Tecnología", "Finanzas", "Industrial", "Retail", "Educación", "Telecomunicaciones"].map(s => <option key={s}>{s}</option>)}</select>
+            <select style={INP} defaultValue={profile.sector}>{["Salud", "Tecnología", "Finanzas", "Industrial", "Retail", "Educación", "Telecomunicaciones", profile.sector].filter((s, i, arr) => arr.indexOf(s) === i).map(s => <option key={s}>{s}</option>)}</select>
           </FormField>
           <div style={{ gridColumn: "1 / -1" }}>
-            <FormField label="Dirección (VARCHAR 255)" required><input style={INP} defaultValue="Via Tristán Morillo 978, Vizcaya, 23699" /></FormField>
+            <FormField label="Dirección (VARCHAR 255)" required><input style={INP} defaultValue={profile.direccion} /></FormField>
           </div>
-          <FormField label="Teléfono (VARCHAR 15)"><input style={INP} defaultValue="982461452" maxLength={15} /></FormField>
+          <FormField label="Teléfono (VARCHAR 15)"><input style={INP} defaultValue={profile.telefono ?? ""} maxLength={15} /></FormField>
           <FormField label="Correo — usuario.correo (vía JOIN)" hint="Este campo pertenece a la tabla usuario, no a empresa. Se actualiza mediante UPDATE usuario SET correo.">
-            <input style={INP} type="email" defaultValue="contacto@finanzasugarte.pe" />
+            <input style={INP} type="email" defaultValue={profile.correo} />
           </FormField>
           <div style={{ gridColumn: "1 / -1" }}>
-            <FormField label="Página web (VARCHAR 100)"><input style={INP} defaultValue="www.finanzasugartes14768.com" maxLength={100} /></FormField>
+            <FormField label="Página web (VARCHAR 100)"><input style={INP} defaultValue={profile.pagina_web ?? ""} maxLength={100} /></FormField>
           </div>
         </div>
         <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
-          <button style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Guardar Cambios</button>
-          <Btn variant="outline">Cancelar</Btn>
+          <button onClick={unavailableCrudAction} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Guardar Cambios</button>
+          <Btn variant="outline" onClick={unavailableCrudAction}>Cancelar</Btn>
         </div>
       </Card>
     </div>
@@ -1330,20 +1508,30 @@ function PerfilEmpresa() {
 
 // ─── EGRESADO: Dashboard ──────────────────────────────────────────────────────
 function EgresadoDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const dashboard = useApiData(true, egresadoApi.dashboard, EGRESADO_DASHBOARD_FALLBACK);
+  const profile = dashboard.profile ?? EGRESADO_PROFILE_FALLBACK;
+  const profileItems = [
+    { label: "Datos egresado completos", done: true },
+    { label: "Correo verificado", done: profile.estado_usuario === "Activo" },
+    { label: "Historial laboral registrado", done: dashboard.metrics.historialRegistrado },
+    { label: "Encuesta completada", done: dashboard.metrics.encuestaCompletada },
+  ];
+  const completedProfile = Math.round((profileItems.filter(item => item.done).length / profileItems.length) * 100);
+
   return (
     <div>
       <div style={{ background: "linear-gradient(135deg, #0A2647, #2563EB)", borderRadius: 14, padding: "28px 30px", marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 13, marginBottom: 4 }}>Bienvenido de vuelta,</div>
-          <div style={{ color: "#fff", fontSize: 24, fontWeight: 700 }}>Bartolomé Pilar Vicente Abascal</div>
-          <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, marginTop: 4 }}>Auditoría · Facultad de Economía · Egresado 2026-03-12 · DNI: 30062065</div>
+          <div style={{ color: "#fff", fontSize: 24, fontWeight: 700 }}>{profile.nombre_egresado} {profile.apellidos_egresado}</div>
+          <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, marginTop: 4 }}>{profile.nombre_carrera} · {profile.nombre_facultad} · Egresado {profile.fecha_egreso} · DNI: {profile.dni}</div>
         </div>
         <button onClick={() => setScreen("egr-bolsa")} style={{ padding: "11px 22px", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.28)", borderRadius: 10, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Ver Bolsa Laboral →</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 24 }}>
-        <StatCard icon={<FileText size={21} />} label="Mis Postulaciones" value="3" sub="1 en proceso (postulacion)" color="#2563EB" />
-        <StatCard icon={<Calendar size={21} />} label="Entrevistas" value="1" sub="Programada 25/01/2026" color="#6366F1" />
-        <StatCard icon={<Briefcase size={21} />} label="Ofertas disponibles" value="89" sub="estado_oferta = Activa" color="#10B981" />
+        <StatCard icon={<FileText size={21} />} label="Mis Postulaciones" value={dashboard.metrics.totalPostulaciones.toLocaleString()} sub={`Estado laboral: ${dashboard.metrics.estadoLaboralActual}`} color="#2563EB" />
+        <StatCard icon={<Calendar size={21} />} label="Última Empresa" value={dashboard.metrics.ultimaEmpresa} sub="fn_ultima_empresa(id_egresado)" color="#6366F1" />
+        <StatCard icon={<Briefcase size={21} />} label="Ofertas disponibles" value={dashboard.metrics.ofertasActivas.toLocaleString()} sub="estado_oferta = Activa" color="#10B981" />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 18 }}>
         <Card style={{ padding: 24 }}>
@@ -1351,22 +1539,22 @@ function EgresadoDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
             Ofertas Recomendadas (estado_oferta: Activa)
             <Btn variant="outline" small onClick={() => setScreen("egr-bolsa")}><Eye size={13} /> Ver todas</Btn>
           </div>
-          {OFERTAS.filter(o => o.estado_oferta === "Activa").slice(0, 3).map((o, i) => (
+          {dashboard.ofertasRecomendadas.slice(0, 3).map((o, i) => (
             <div key={i} style={{ padding: "14px 0", borderBottom: i < 2 ? "1px solid #F1F5F9" : "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                 <div style={{ width: 40, height: 40, borderRadius: 10, background: "#EFF6FF", display: "flex", alignItems: "center", justifyContent: "center" }}><Building2 size={18} color="#2563EB" /></div>
                 <div>
                   <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A" }}>{o.titulo}</div>
-                  <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>{o.empresa} · {o.modalidad} · S/. {o.salario.toLocaleString()}</div>
+                  <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>{o.empresa} · {o.modalidad} · {o.salario != null ? `S/. ${o.salario.toLocaleString()}` : "Sueldo no publicado"}</div>
                 </div>
               </div>
-              <button onClick={() => setScreen("egr-bolsa")} style={{ padding: "7px 14px", background: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Postular</button>
+              <button onClick={unavailableCrudAction} style={{ padding: "7px 14px", background: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Postular</button>
             </div>
           ))}
         </Card>
         <Card style={{ padding: 24 }}>
           <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16, color: "#0F172A" }}>Estado de Mi Perfil</div>
-          {[{ label: "Datos egresado completos", done: true }, { label: "Correo verificado", done: true }, { label: "Historial laboral registrado", done: true }, { label: "Encuesta completada", done: false }].map((item, i) => (
+          {profileItems.map((item, i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: i < 3 ? "1px solid #F8FAFC" : "none" }}>
               <div style={{ width: 24, height: 24, borderRadius: "50%", background: item.done ? "#DCFCE7" : "#F1F5F9", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 {item.done ? <CheckCircle size={14} color="#10B981" /> : <Clock size={14} color="#CBD5E1" />}
@@ -1375,8 +1563,8 @@ function EgresadoDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
             </div>
           ))}
           <div style={{ marginTop: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#64748B", marginBottom: 6 }}><span>Completado</span><span style={{ fontWeight: 600 }}>75%</span></div>
-            <div style={{ background: "#F1F5F9", borderRadius: 999, height: 8 }}><div style={{ width: "75%", height: 8, background: "#2563EB", borderRadius: 999 }} /></div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#64748B", marginBottom: 6 }}><span>Completado</span><span style={{ fontWeight: 600 }}>{completedProfile}%</span></div>
+            <div style={{ background: "#F1F5F9", borderRadius: 999, height: 8 }}><div style={{ width: `${completedProfile}%`, height: 8, background: "#2563EB", borderRadius: 999 }} /></div>
           </div>
           <button onClick={() => setScreen("egr-encuesta")} style={{ width: "100%", marginTop: 16, padding: "10px", background: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Completar Encuesta →</button>
         </Card>
@@ -1390,15 +1578,28 @@ function BolsaLaboral() {
   const [search, setSearch] = useState("");
   const [modalidad, setModalidad] = useState("Todos");
   const [contrato, setContrato] = useState("Todos");
-  const [selected, setSelected] = useState<typeof OFERTAS[0] | null>(null);
+  const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState<AdminOferta | null>(null);
 
-  const filtered = OFERTAS.filter(o => {
+  const localOfertas = (OFERTAS as AdminOferta[]).filter(o => {
     const q = search.toLowerCase();
     const match = o.titulo.toLowerCase().includes(q) || o.empresa.toLowerCase().includes(q) || o.area.toLowerCase().includes(q) || o.puesto.toLowerCase().includes(q);
     const mok = modalidad === "Todos" || o.modalidad === modalidad;
     const cok = contrato === "Todos" || o.tipo_contrato === contrato;
-    return match && mok && cok;
+    return o.estado_oferta === "Activa" && match && mok && cok;
   });
+  const fallback = paginatedFallback(localOfertas, page);
+  const ofertasPage = usePaginatedApiData(
+    true,
+    () => egresadoApi.bolsa({ page, pageSize: DEFAULT_PAGE_SIZE, search, modalidad, contrato }),
+    fallback,
+    [page, search, modalidad, contrato]
+  );
+  const filtered = ofertasPage.items;
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, modalidad, contrato]);
 
   return (
     <div>
@@ -1412,7 +1613,7 @@ function BolsaLaboral() {
             <DR label="ubicacion" value={selected.ubicacion} />
             <DR label="modalidad" value={selected.modalidad} />
             <DR label="tipo_contrato" value={selected.tipo_contrato} />
-            <DR label="salario DECIMAL(10,2)" value={`S/. ${selected.salario.toLocaleString()}`} />
+            <DR label="salario DECIMAL(10,2)" value={selected.salario != null ? `S/. ${selected.salario.toLocaleString()}` : "—"} />
             <DR label="fecha_publicacion" value={selected.fecha_publicacion} />
             <DR label="fecha_cierre" value={selected.fecha_cierre} />
             <DR label="estado_oferta" value={selected.estado_oferta} />
@@ -1453,17 +1654,20 @@ function BolsaLaboral() {
             <div style={{ fontSize: 12, color: "#94A3B8", marginBottom: 4 }}>Puesto: {o.puesto}</div>
             <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14 }}>{o.empresa}</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
-              {[{ icon: <MapPin size={11} />, label: o.ubicacion }, { icon: <Clock size={11} />, label: o.modalidad }, { icon: <DollarSign size={11} />, label: `S/. ${o.salario.toLocaleString()}` }].map((tag, j) => (
+              {[{ icon: <MapPin size={11} />, label: o.ubicacion }, { icon: <Clock size={11} />, label: o.modalidad }, { icon: <DollarSign size={11} />, label: o.salario != null ? `S/. ${o.salario.toLocaleString()}` : "No publicado" }].map((tag, j) => (
                 <span key={j} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", background: "#F8FAFC", borderRadius: 999, fontSize: 12, color: "#64748B", border: "1px solid #E2E8F0" }}>{tag.icon} {tag.label}</span>
               ))}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button style={{ flex: 1, padding: "9px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Postular</button>
+              <button onClick={unavailableCrudAction} style={{ flex: 1, padding: "9px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Postular</button>
               <button onClick={() => setSelected(o)} style={{ padding: "9px 14px", background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 8, cursor: "pointer" }}><Eye size={14} color="#64748B" /></button>
             </div>
             <div style={{ marginTop: 10, fontSize: 11, color: "#94A3B8" }}>Publicado: {o.fecha_publicacion} · Cierre: {o.fecha_cierre}</div>
           </Card>
         ))}
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <Pagination total={ofertasPage.total} showing={filtered.length} page={ofertasPage.page} pageSize={ofertasPage.pageSize} onPageChange={setPage} />
       </div>
     </div>
   );
@@ -1472,9 +1676,37 @@ function BolsaLaboral() {
 // ─── EGRESADO: Mis Postulaciones ──────────────────────────────────────────────
 function MisPostulaciones() {
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
-  const filtered = POSTULACIONES.slice(0, 3).filter(p => estadoFiltro === "Todos" || p.estado_postulacion === estadoFiltro);
+  const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState<EgresadoPostulacion | null>(null);
+  const localPostulaciones = (POSTULACIONES as EgresadoPostulacion[]).slice(0, 3).filter(p => estadoFiltro === "Todos" || p.estado_postulacion === estadoFiltro);
+  const fallback = paginatedFallback(localPostulaciones, page);
+  const postulacionesPage = usePaginatedApiData(
+    true,
+    () => egresadoApi.postulaciones({ page, pageSize: DEFAULT_PAGE_SIZE, estado: estadoFiltro }),
+    fallback,
+    [page, estadoFiltro]
+  );
+  const filtered = postulacionesPage.items;
+
+  useEffect(() => {
+    setPage(1);
+  }, [estadoFiltro]);
+
   return (
     <div>
+      {selected && (
+        <DetailModal title={`Postulación #${selected.id_postulacion} — ${selected.oferta}`} onClose={() => setSelected(null)}>
+          <DetailSection title="tabla: postulacion + oferta_laboral + empresa">
+            <DR label="id_postulacion" value={selected.id_postulacion} />
+            <DR label="oferta" value={selected.oferta} />
+            <DR label="empresa" value={selected.empresa} />
+            <DR label="fecha_postulacion" value={selected.fecha_postulacion} />
+            <DR label="estado_postulacion" value={selected.estado_postulacion} />
+            <DR label="cv_adjunto" value={selected.cv_adjunto} />
+            <DR label="observaciones" value={selected.observaciones} full />
+          </DetailSection>
+        </DetailModal>
+      )}
       <PageHeader title="Mis Postulaciones" subtitle="Tabla: postulacion — mis registros como id_egresado" />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
@@ -1496,11 +1728,12 @@ function MisPostulaciones() {
                 <TD>{p.fecha_postulacion.slice(0, 10)}</TD>
                 <TD><StatusBadge label={p.estado_postulacion} /></TD>
                 <TD><span style={{ fontSize: 12, color: "#2563EB" }}>{p.cv_adjunto}</span></TD>
-                <TD><Btn variant="ghost" small><Eye size={14} /> Ver detalle</Btn></TD>
+                <TD><Btn variant="ghost" small onClick={() => setSelected(p)}><Eye size={14} /> Ver detalle</Btn></TD>
               </tr>
             ))}
           </tbody>
         </table>
+        <Pagination total={postulacionesPage.total} showing={filtered.length} page={postulacionesPage.page} pageSize={postulacionesPage.pageSize} onPageChange={setPage} />
       </Card>
     </div>
   );
@@ -1512,64 +1745,66 @@ function MisPostulaciones() {
 // tabla: usuario: nombre_usuario, correo, estado_usuario
 // NOTA: No existe campo `foto` en la BD. El avatar es solo visual.
 function MiPerfil() {
+  const profile = useApiData(true, egresadoApi.perfil, EGRESADO_PROFILE_FALLBACK) ?? EGRESADO_PROFILE_FALLBACK;
+  const initials = `${profile.nombre_egresado[0] ?? ""}${profile.apellidos_egresado[0] ?? ""}`.toUpperCase();
   return (
     <div>
       <PageHeader title="Mi Perfil" subtitle="Tablas: egresado + usuario (id_usuario compartido). Sin campo descripcion." />
-      <Card style={{ padding: 32, maxWidth: 820 }}>
+      <Card key={profile.id_usuario} style={{ padding: 32, maxWidth: 820 }}>
         <div style={{ display: "flex", gap: 24, alignItems: "flex-start", marginBottom: 28, paddingBottom: 24, borderBottom: "1px solid #F1F5F9" }}>
           <div style={{ flexShrink: 0 }}>
-            <div style={{ width: 100, height: 100, borderRadius: 16, background: "linear-gradient(135deg, #2563EB, #6366F1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, fontWeight: 700, color: "#fff", marginBottom: 10 }}>BP</div>
-            <button style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1px solid #D1D5DB", borderRadius: 8, background: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", color: "#374151" }}><Upload size={13} /> Foto (visual)</button>
+            <div style={{ width: 100, height: 100, borderRadius: 16, background: "linear-gradient(135deg, #2563EB, #6366F1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, fontWeight: 700, color: "#fff", marginBottom: 10 }}>{initials}</div>
+            <button onClick={unavailableCrudAction} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1px solid #D1D5DB", borderRadius: 8, background: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", color: "#374151" }}><Upload size={13} /> Foto (visual)</button>
           </div>
           <div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: "#0F172A" }}>Bartolomé Pilar Vicente Abascal</div>
-            <div style={{ fontSize: 14, color: "#64748B", marginTop: 3 }}>Auditoría · Facultad de Economía · Bachiller</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: "#0F172A" }}>{profile.nombre_egresado} {profile.apellidos_egresado}</div>
+            <div style={{ fontSize: 14, color: "#64748B", marginTop: 3 }}>{profile.nombre_carrera} · {profile.nombre_facultad} · {profile.grado_academico}</div>
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <Badge label="estado_usuario: Activo" variant="success" />
-              <Badge label="sexo: M" variant="info" />
+              <Badge label={`estado_usuario: ${profile.estado_usuario}`} variant={profile.estado_usuario === "Activo" ? "success" : "neutral"} />
+              <Badge label={`sexo: ${profile.sexo}`} variant="info" />
             </div>
           </div>
         </div>
 
         <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A", marginBottom: 14 }}>Datos Personales (tabla: egresado)</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 28 }}>
-          <FormField label="DNI — CHAR(8)" required><input style={INP} defaultValue="30062065" maxLength={8} /></FormField>
+          <FormField label="DNI — CHAR(8)" required><input style={INP} defaultValue={profile.dni} maxLength={8} /></FormField>
           <FormField label="Sexo — CHAR(1)" required hint="M = Masculino, F = Femenino">
-            <select style={INP}>
+            <select style={INP} defaultValue={profile.sexo}>
               <option value="M">Masculino (M)</option>
               <option value="F">Femenino (F)</option>
             </select>
           </FormField>
-          <FormField label="Nombre egresado (VARCHAR 100)" required><input style={INP} defaultValue="Bartolomé Pilar" /></FormField>
-          <FormField label="Apellidos egresado (VARCHAR 100)" required><input style={INP} defaultValue="Vicente Abascal" /></FormField>
-          <FormField label="Teléfono (VARCHAR 15)"><input style={INP} defaultValue="944672125" maxLength={15} /></FormField>
-          <FormField label="Fecha de egreso (DATE)" required><input style={INP} type="date" defaultValue="2026-03-12" /></FormField>
+          <FormField label="Nombre egresado (VARCHAR 100)" required><input style={INP} defaultValue={profile.nombre_egresado} /></FormField>
+          <FormField label="Apellidos egresado (VARCHAR 100)" required><input style={INP} defaultValue={profile.apellidos_egresado} /></FormField>
+          <FormField label="Teléfono (VARCHAR 15)"><input style={INP} defaultValue={profile.telefono ?? ""} maxLength={15} /></FormField>
+          <FormField label="Fecha de egreso (DATE)" required><input style={INP} type="date" defaultValue={profile.fecha_egreso} /></FormField>
           <div style={{ gridColumn: "1 / -1" }}>
-            <FormField label="Dirección (VARCHAR 255)"><input style={INP} defaultValue="Calle Moreno Hervia 592, Lugo, 33354" /></FormField>
+            <FormField label="Dirección (VARCHAR 255)"><input style={INP} defaultValue={profile.direccion ?? ""} /></FormField>
           </div>
         </div>
 
         <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A", marginBottom: 14 }}>Datos Académicos (tabla: carrera → facultad)</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 28 }}>
           <FormField label="Facultad (id_facultad → nombre_facultad)">
-            <select style={INP}>{FACULTADES.map(f => <option key={f}>{f}</option>)}</select>
+            <select style={INP} defaultValue={profile.nombre_facultad}>{FACULTADES.concat(profile.nombre_facultad).filter((f, i, arr) => arr.indexOf(f) === i).map(f => <option key={f}>{f}</option>)}</select>
           </FormField>
           <FormField label="Carrera (id_carrera → nombre_carrera)" required>
-            <select style={INP}>{(CARRERAS["Facultad de Economía"] ?? []).map(c => <option key={c}>{c}</option>)}</select>
+            <select style={INP} defaultValue={profile.nombre_carrera}>{(CARRERAS[profile.nombre_facultad] ?? []).concat(profile.nombre_carrera).filter((c, i, arr) => arr.indexOf(c) === i).map(c => <option key={c}>{c}</option>)}</select>
           </FormField>
         </div>
 
         <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A", marginBottom: 14 }}>Cuenta de Acceso (tabla: usuario)</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
           <FormField label="Nombre de usuario (nombre_usuario)" hint="No puede modificarse.">
-            <input style={{ ...INP, background: "#F8FAFC", color: "#64748B" }} defaultValue="bartolomé.vicente85683" readOnly />
+            <input style={{ ...INP, background: "#F8FAFC", color: "#64748B" }} defaultValue={profile.nombre_usuario} readOnly />
           </FormField>
-          <FormField label="Correo (usuario.correo)" required><input style={INP} type="email" defaultValue="bartolomé.vicente85683@gmail.com" /></FormField>
+          <FormField label="Correo (usuario.correo)" required><input style={INP} type="email" defaultValue={profile.correo} /></FormField>
         </div>
 
         <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
-          <button style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Actualizar Perfil</button>
-          <Btn variant="outline">Cancelar</Btn>
+          <button onClick={unavailableCrudAction} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Actualizar Perfil</button>
+          <Btn variant="outline" onClick={unavailableCrudAction}>Cancelar</Btn>
         </div>
       </Card>
     </div>
@@ -1584,10 +1819,18 @@ function MiPerfil() {
 function HistorialLaboral() {
   const [showForm, setShowForm] = useState(false);
   const [actualFlag, setActualFlag] = useState(false);
+  const [page, setPage] = useState(1);
+  const fallback = paginatedFallback(HISTORIAL_LABORAL as HistorialLaboralItem[], page);
+  const historialPage = usePaginatedApiData(
+    true,
+    () => egresadoApi.historial({ page, pageSize: DEFAULT_PAGE_SIZE }),
+    fallback,
+    [page]
+  );
 
   return (
     <div>
-      <PageHeader title="Historial Laboral" subtitle="Tabla: historial_laboral. Sin campo descripcion. Campo actual = BOOLEAN." action={<Btn onClick={() => setShowForm(!showForm)}><Plus size={14} /> Agregar Experiencia</Btn>} />
+      <PageHeader title="Historial Laboral" subtitle="Tabla: historial_laboral. Sin campo descripcion. Campo actual = BOOLEAN." action={<Btn onClick={unavailableCrudAction}><Plus size={14} /> Agregar Experiencia</Btn>} />
 
       {showForm && (
         <Card style={{ padding: 28, marginBottom: 20 }}>
@@ -1612,7 +1855,7 @@ function HistorialLaboral() {
             </div>
           </div>
           <div style={{ marginTop: 20, display: "flex", gap: 10 }}>
-            <button style={{ padding: "10px 22px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Guardar Experiencia</button>
+            <button onClick={unavailableCrudAction} style={{ padding: "10px 22px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Guardar Experiencia</button>
             <Btn variant="outline" onClick={() => setShowForm(false)}>Cancelar</Btn>
           </div>
         </Card>
@@ -1622,28 +1865,26 @@ function HistorialLaboral() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead><tr><TH label="nombre_empresa" /><TH label="cargo" /><TH label="fecha_inicio" /><TH label="fecha_fin" /><TH label="modalidad" /><TH label="salario" /><TH label="actual (BOOLEAN)" /><TH label="Acciones" /></tr></thead>
           <tbody>
-            {HISTORIAL_LABORAL.map((h, i) => (
+            {historialPage.items.map((h, i) => (
               <tr key={i}>
                 <TD><span style={{ fontWeight: 600 }}>{h.nombre_empresa}</span></TD>
                 <TD>{h.cargo}</TD>
                 <TD>{h.fecha_inicio}</TD>
                 <TD>{h.actual ? <Badge label="NULL (En curso)" variant="success" /> : h.fecha_fin}</TD>
                 <TD><span style={{ padding: "3px 10px", background: "#F1F5F9", borderRadius: 6, fontSize: 12 }}>{h.modalidad}</span></TD>
-                <TD><span style={{ fontWeight: 600, color: "#10B981" }}>S/. {h.salario.toLocaleString()}</span></TD>
+                <TD><span style={{ fontWeight: 600, color: "#10B981" }}>{h.salario != null ? `S/. ${h.salario.toLocaleString()}` : "—"}</span></TD>
                 <TD><Badge label={h.actual ? "TRUE" : "FALSE"} variant={h.actual ? "success" : "neutral"} /></TD>
                 <TD>
                   <div style={{ display: "flex", gap: 2 }}>
-                    <Btn variant="ghost" small><Edit2 size={14} /></Btn>
-                    <Btn variant="danger" small><Trash2 size={14} /></Btn>
+                    <Btn variant="ghost" small onClick={unavailableCrudAction}><Edit2 size={14} /></Btn>
+                    <Btn variant="danger" small onClick={unavailableCrudAction}><Trash2 size={14} /></Btn>
                   </div>
                 </TD>
               </tr>
             ))}
           </tbody>
         </table>
-        <div style={{ padding: "12px 20px", borderTop: "1px solid #F1F5F9" }}>
-          <span style={{ fontSize: 13, color: "#64748B" }}>{HISTORIAL_LABORAL.length} registros en historial_laboral para id_egresado=1</span>
-        </div>
+        <Pagination total={historialPage.total} showing={historialPage.items.length} page={historialPage.page} pageSize={historialPage.pageSize} onPageChange={setPage} />
       </Card>
     </div>
   );
@@ -1657,10 +1898,10 @@ function HistorialLaboral() {
 //   satisfaccion_profesional: Muy Satisfecho | Satisfecho | Regular | Insatisfecho
 //   tiempo_conseguir_empleo: 1 mes | 3 meses | 6 meses | 1 año
 function EncuestaSeguimiento() {
-  const lastSurveyDate = "15/01/2026"; // fecha_registro de última encuesta
-  const nextSurveyDate = "15/07/2026"; // +6 meses
-  // today: 25/06/2026 < 15/07/2026 → canSubmit = false
-  const canSubmit = false;
+  const encuesta = useApiData<EgresadoEncuesta | null>(true, egresadoApi.encuesta, null);
+  const lastSurveyDate = encuesta?.fecha_registro ?? "Sin encuesta";
+  const nextSurveyDate = encuesta?.proxima_disponible ?? "Disponible";
+  const canSubmit = encuesta == null || encuesta.can_submit === true || encuesta.can_submit === 1;
 
   return (
     <div>
@@ -1670,7 +1911,7 @@ function EncuestaSeguimiento() {
         <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
           <div style={{ width: 42, height: 42, borderRadius: 10, background: "#FEF3C7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Clock size={20} color="#92400E" /></div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, color: "#92400E", marginBottom: 10 }}>Encuesta no disponible aún</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: "#92400E", marginBottom: 10 }}>{canSubmit ? "Encuesta disponible" : "Encuesta no disponible aún"}</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div style={{ background: "#F8FAFC", borderRadius: 8, padding: "10px 14px" }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Última encuesta (fecha_registro)</div>
@@ -1703,7 +1944,7 @@ function EncuestaSeguimiento() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>estado_laboral (VARCHAR 50) <span style={{ color: "#EF4444" }}>*</span></label>
-              <select style={INP}>
+              <select style={INP} defaultValue={encuesta?.estado_laboral ?? "Seleccionar..."}>
                 <option>Seleccionar...</option>
                 <option>Empleado</option>
                 <option>Independiente</option>
@@ -1714,23 +1955,23 @@ function EncuestaSeguimiento() {
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>nombre_empresa_actual (VARCHAR 150)</label>
-              <input style={INP} placeholder="nullable — dejar vacío si desempleado" />
+              <input style={INP} placeholder="nullable — dejar vacío si desempleado" defaultValue={encuesta?.nombre_empresa_actual ?? ""} />
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>cargo_actual (VARCHAR 100)</label>
-              <input style={INP} placeholder="nullable" />
+              <input style={INP} placeholder="nullable" defaultValue={encuesta?.cargo_actual ?? ""} />
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>area_trabajo (VARCHAR 100)</label>
-              <input style={INP} placeholder="Ej: Logística, Salud, Tecnología..." />
+              <input style={INP} placeholder="Ej: Logística, Salud, Tecnología..." defaultValue={encuesta?.area_trabajo ?? ""} />
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>sueldo_mensual — DECIMAL(10,2) nullable</label>
-              <input style={INP} type="number" step="0.01" placeholder="Ej: 3500.00" />
+              <input style={INP} type="number" step="0.01" placeholder="Ej: 3500.00" defaultValue={encuesta?.sueldo_mensual ?? ""} />
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>tipo_contrato (VARCHAR 50)</label>
-              <select style={INP}>
+              <select style={INP} defaultValue={encuesta?.tipo_contrato ?? "Seleccionar..."}>
                 <option>Seleccionar...</option>
                 <option>Indefinido</option>
                 <option>Temporal</option>
@@ -1739,7 +1980,7 @@ function EncuestaSeguimiento() {
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>satisfaccion_profesional (VARCHAR 50)</label>
-              <select style={INP}>
+              <select style={INP} defaultValue={encuesta?.satisfaccion_profesional ?? "Seleccionar..."}>
                 <option>Seleccionar...</option>
                 <option>Muy Satisfecho</option>
                 <option>Satisfecho</option>
@@ -1749,7 +1990,7 @@ function EncuestaSeguimiento() {
             </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>tiempo_conseguir_empleo (VARCHAR 50)</label>
-              <select style={INP}>
+              <select style={INP} defaultValue={encuesta?.tiempo_conseguir_empleo ?? "Seleccionar..."}>
                 <option>Seleccionar...</option>
                 <option>1 mes</option>
                 <option>3 meses</option>
@@ -1759,13 +2000,13 @@ function EncuestaSeguimiento() {
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>observaciones (TEXT — nullable)</label>
-              <textarea style={{ ...INP, height: 90, resize: "vertical" }} placeholder="observaciones opcionales..." />
+              <textarea style={{ ...INP, height: 90, resize: "vertical" }} placeholder="observaciones opcionales..." defaultValue={encuesta?.observaciones ?? ""} />
             </div>
           </div>
         </fieldset>
 
         <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #F1F5F9", display: "flex", gap: 10, alignItems: "center" }}>
-          <Btn disabled={!canSubmit}>Enviar Encuesta</Btn>
+          <Btn disabled={!canSubmit} onClick={unavailableCrudAction}>Enviar Encuesta</Btn>
           {!canSubmit && (
             <span style={{ fontSize: 12, color: "#94A3B8", display: "flex", alignItems: "center", gap: 5 }}>
               <Clock size={13} /> Disponible a partir del {nextSurveyDate}
@@ -1780,7 +2021,15 @@ function EncuestaSeguimiento() {
 // ─── Notificaciones (todos los roles) ────────────────────────────────────────
 // tabla: notificacion — id_notificacion, id_usuario, titulo, mensaje, leido BOOLEAN, fecha_envio DATETIME
 function Notificaciones({ useApi = false }: { useApi?: boolean }) {
-  const apiNotifs = useApiData(useApi, adminApi.notificaciones, NOTIFICACIONES_DATA as ApiNotificacion[]);
+  const [page, setPage] = useState(1);
+  const fallback = paginatedFallback(NOTIFICACIONES_DATA as ApiNotificacion[], page);
+  const notifsPage = usePaginatedApiData(
+    useApi,
+    () => adminApi.notificaciones({ page, pageSize: DEFAULT_PAGE_SIZE }),
+    fallback,
+    [useApi, page]
+  );
+  const apiNotifs = useApi ? notifsPage.items : fallback.items;
   const [notifs, setNotifs] = useState<ApiNotificacion[]>(apiNotifs);
 
   useEffect(() => {
@@ -1788,6 +2037,11 @@ function Notificaciones({ useApi = false }: { useApi?: boolean }) {
   }, [apiNotifs]);
 
   function markRead(id: number) {
+    if (useApi) {
+      unavailableCrudAction();
+      return;
+    }
+
     setNotifs(prev => prev.map(n => n.id_notificacion === id ? { ...n, leido: true } : n));
   }
   const unread = notifs.filter(n => !n.leido).length;
@@ -1797,9 +2051,14 @@ function Notificaciones({ useApi = false }: { useApi?: boolean }) {
       <PageHeader
         title="Notificaciones"
         subtitle={`Tabla: notificacion — id_usuario = sesión activa — ${unread} sin leer (leido = FALSE)`}
-        action={<Btn variant="outline" onClick={() => setNotifs(prev => prev.map(n => ({ ...n, leido: true })))}><CheckCircle size={14} /> Marcar todas leídas</Btn>}
+        action={<Btn variant="outline" onClick={() => useApi ? unavailableCrudAction() : setNotifs(prev => prev.map(n => ({ ...n, leido: true })))}><CheckCircle size={14} /> Marcar todas leídas</Btn>}
       />
       <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 760 }}>
+        {notifs.length === 0 && (
+          <Card style={{ padding: "18px 22px" }}>
+            <div style={{ fontSize: 13, color: "#64748B" }}>No hay notificaciones para mostrar.</div>
+          </Card>
+        )}
         {notifs.map((n) => (
           <Card key={n.id_notificacion} style={{ padding: "18px 22px", borderLeft: `4px solid ${n.leido ? "#E2E8F0" : "#2563EB"}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
@@ -1823,6 +2082,9 @@ function Notificaciones({ useApi = false }: { useApi?: boolean }) {
             </div>
           </Card>
         ))}
+      </div>
+      <div style={{ maxWidth: 760, marginTop: 12 }}>
+        <Pagination total={useApi ? notifsPage.total : (NOTIFICACIONES_DATA as ApiNotificacion[]).length} showing={notifs.length} page={useApi ? notifsPage.page : page} pageSize={useApi ? notifsPage.pageSize : DEFAULT_PAGE_SIZE} onPageChange={setPage} />
       </div>
     </div>
   );
@@ -2011,7 +2273,7 @@ export default function App() {
       case "egr-encuesta": return <EncuestaSeguimiento />;
       case "egr-perfil": return <MiPerfil />;
       case "egr-historial": return <HistorialLaboral />;
-      case "notificaciones": return <Notificaciones useApi={role === "admin"} />;
+      case "notificaciones": return <Notificaciones useApi={role === "admin" || role === "empresa" || role === "egresado"} />;
       default: return null;
     }
   }

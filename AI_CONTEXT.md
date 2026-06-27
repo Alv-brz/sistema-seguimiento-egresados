@@ -116,8 +116,18 @@ El backend es una API REST modular bajo `/api`:
 - `GET /api/encuestas`: listado de lectura para gestion admin de encuestas.
 - `GET /api/auditoria`: listado de lectura para auditoria.
 - `GET /api/notificaciones`: notificaciones del usuario autenticado.
+- `GET /api/empresa/dashboard`: metricas y resumen de la empresa autenticada.
+- `GET /api/empresa/ofertas`: ofertas de la empresa autenticada.
+- `GET /api/empresa/postulaciones`: postulaciones recibidas por ofertas de la empresa autenticada.
+- `GET /api/empresa/perfil`: datos reales de empresa + usuario de la empresa autenticada.
+- `GET /api/egresado/dashboard`: resumen del egresado autenticado.
+- `GET /api/egresado/bolsa`: ofertas activas disponibles para egresados.
+- `GET /api/egresado/postulaciones`: postulaciones del egresado autenticado.
+- `GET /api/egresado/perfil`: datos reales de usuario + egresado + carrera + facultad.
+- `GET /api/egresado/historial`: historial laboral del egresado autenticado.
+- `GET /api/egresado/encuesta`: ultima encuesta asociada al egresado autenticado.
 
-Los endpoints de lectura inicial estan implementados para pantallas de administrador. Empresa y egresado conservan comportamiento mock en esta fase. No hay todavia endpoints de escritura ni CRUD.
+Los endpoints de lectura inicial estan implementados para pantallas de administrador, empresa y egresado. No hay todavia endpoints de escritura ni CRUD.
 
 ## Flujo Frontend/Backend
 
@@ -147,7 +157,13 @@ La capa frontend reutilizable esta en `src/app/api.ts`:
 - Lee el token desde `readStoredSession()`.
 - Envia `Authorization: Bearer <token>` cuando existe sesion.
 - Expone `adminApi` para dashboard, egresados, empresas, ofertas, encuestas, auditoria y notificaciones.
+- Expone `empresaApi` para dashboard, ofertas, postulaciones, perfil y notificaciones de empresa.
+- Expone `egresadoApi` para dashboard, bolsa laboral, postulaciones, perfil, historial, encuesta y notificaciones de egresado.
 - Las pantallas admin usan datos reales con fallback a los mocks locales si la API no esta disponible.
+- Las pantallas empresa usan datos reales filtrados por el `id_usuario` del JWT.
+- Las pantallas egresado usan datos reales filtrados por el `id_usuario` del JWT.
+- Los listados admin consumen respuestas paginadas `{ items, total, page, pageSize }`.
+- Los filtros visibles en listados admin se envian como query params al backend.
 
 ## Modelo de Autenticacion
 
@@ -303,6 +319,9 @@ Backend implementado:
 - `encuestas`: listado admin de encuestas asociadas a egresados.
 - `auditoria`: lectura de tabla `auditoria`.
 - `notificaciones`: lectura de notificaciones del usuario autenticado.
+- `empresa`: dashboard, ofertas propias, postulaciones recibidas y perfil de la empresa autenticada.
+- `egresado`: dashboard, bolsa laboral, postulaciones propias, perfil, historial y ultima encuesta del egresado autenticado.
+- `utils/pagination`: normalizacion de `page`, `pageSize` y filtros de query.
 
 Backend pendiente:
 
@@ -323,6 +342,10 @@ Frontend:
 - Si se agregan llamadas API, concentrar helpers de autenticacion/API en archivos dedicados, no duplicar `fetch` con URLs hardcodeadas por toda la UI.
 - Mantener `VITE_API_URL` como base configurable.
 - En pantallas admin, mantener fallback local a mocks mientras no exista manejo visual de errores/carga.
+- En pantallas empresa, nunca usar ids hardcodeados para consultar datos; filtrar siempre por `res.locals.auth.id_usuario`.
+- En pantallas egresado, nunca usar ids hardcodeados para consultar datos personales; filtrar siempre por `res.locals.auth.id_usuario`.
+- En listados admin, usar paginacion real desde backend para evitar cargar miles de filas.
+- Los botones de acciones aun no implementadas deben mostrar `Función disponible en la fase de CRUD.` y no ejecutar escrituras locales/remotas.
 
 Backend:
 
@@ -335,6 +358,7 @@ Backend:
 - Responder JSON uniforme con `ok`.
 - Usar `requireAuth` y `requireRole` en rutas protegidas.
 - La fase actual solo permite `SELECT`; no introducir `INSERT`, `UPDATE`, `DELETE` ni CRUD hasta aprobacion de fase posterior.
+- Los endpoints de listados devuelven objetos paginados con `items`, `total`, `page` y `pageSize`.
 
 Base de datos:
 
@@ -371,7 +395,12 @@ Base de datos:
 - Las rutas internas del frontend son estado local, no React Router.
 - Los datos de las pantallas siguen mock hasta que se implemente cada modulo REST.
 - Las pantallas de administrador ya consumen datos reales de MySQL para dashboard, egresados, empresas, ofertas, encuestas, auditoria y notificaciones.
-- Los listados grandes iniciales usan `LIMIT 500` en backend hasta implementar paginacion real.
+- Los listados admin usan paginacion real con `LIMIT/OFFSET` y filtros server-side.
+- Las pantallas de empresa ya consumen datos reales de MySQL para dashboard, mis ofertas, postulaciones recibidas, perfil y notificaciones.
+- Las consultas de empresa filtran siempre por el `id_usuario` obtenido del JWT, que corresponde a `empresa.id_usuario`.
+- Las pantallas de egresado ya consumen datos reales de MySQL para dashboard, bolsa laboral, mis postulaciones, perfil, historial laboral, encuesta y notificaciones.
+- Las consultas personales de egresado filtran siempre por el `id_usuario` obtenido del JWT, que corresponde a `egresado.id_usuario`.
+- Las acciones de editar, eliminar, cerrar oferta, guardar, exportar y marcar notificaciones en admin quedan bloqueadas con aviso hasta la fase CRUD.
 - Los errores SQL `SIGNAL` se traducen a HTTP 422 y duplicados a 409.
 
 ## Protocolo Para Futuras Fases

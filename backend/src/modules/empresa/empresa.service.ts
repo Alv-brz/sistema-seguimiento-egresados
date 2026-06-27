@@ -1,0 +1,252 @@
+import { pool } from "../../config/db.js";
+import type { PaginatedResult, PaginationInput } from "../../utils/pagination.js";
+
+export type EmpresaOfertasFilters = {
+  estado?: string;
+  modalidad?: string;
+};
+
+export type EmpresaPostulacionesFilters = {
+  search?: string;
+  estado?: string;
+};
+
+export async function getEmpresaDashboard(idEmpresa: number) {
+  const [profileRows] = await pool.execute(
+    `SELECT
+       em.id_usuario,
+       em.ruc,
+       em.razon_social,
+       em.nombre_comercial,
+       em.sector,
+       em.direccion,
+       em.telefono,
+       em.pagina_web,
+       u.correo,
+       u.estado_usuario
+     FROM empresa em
+     INNER JOIN usuario u ON u.id_usuario = em.id_usuario
+     WHERE em.id_usuario = ?`,
+    [idEmpresa]
+  );
+
+  const [countRows] = await pool.execute(
+    `SELECT
+       COUNT(DISTINCT o.id_oferta) AS totalOfertas,
+       SUM(CASE WHEN o.estado_oferta = 'Activa' THEN 1 ELSE 0 END) AS ofertasActivas,
+       SUM(CASE WHEN o.estado_oferta = 'Cerrada' THEN 1 ELSE 0 END) AS ofertasCerradas,
+       COUNT(p.id_postulacion) AS totalPostulaciones,
+       SUM(CASE WHEN p.estado_postulacion = 'Pendiente' THEN 1 ELSE 0 END) AS postulacionesPendientes,
+       SUM(CASE WHEN p.estado_postulacion = 'Aceptado' THEN 1 ELSE 0 END) AS postulacionesAceptadas,
+       SUM(CASE WHEN p.estado_postulacion = 'Rechazado' THEN 1 ELSE 0 END) AS postulacionesRechazadas,
+       SUM(CASE WHEN p.estado_postulacion = 'En Proceso' THEN 1 ELSE 0 END) AS postulacionesEnProceso
+     FROM oferta_laboral o
+     LEFT JOIN postulacion p ON p.id_oferta = o.id_oferta
+     WHERE o.id_empresa = ?`,
+    [idEmpresa]
+  );
+
+  const [ofertasRows] = await pool.execute(
+    `SELECT
+       o.id_oferta,
+       o.titulo,
+       o.descripcion,
+       o.puesto,
+       o.area,
+       o.ubicacion,
+       o.modalidad,
+       o.tipo_contrato,
+       o.salario,
+       o.requisitos,
+       o.fecha_publicacion,
+       o.fecha_cierre,
+       o.estado_oferta,
+       em.razon_social AS empresa
+     FROM oferta_laboral o
+     INNER JOIN empresa em ON em.id_usuario = o.id_empresa
+     WHERE o.id_empresa = ? AND o.estado_oferta = 'Activa'
+     ORDER BY o.fecha_publicacion DESC, o.id_oferta DESC
+     LIMIT 4`,
+    [idEmpresa]
+  );
+
+  const [postulacionRows] = await pool.execute(
+    `SELECT
+       p.id_postulacion,
+       CONCAT(e.nombre_egresado, ' ', e.apellidos_egresado) AS egresado,
+       c.nombre_carrera AS carrera,
+       o.titulo AS oferta,
+       em.razon_social AS empresa,
+       p.fecha_postulacion,
+       p.estado_postulacion,
+       p.observaciones,
+       p.cv_adjunto
+     FROM postulacion p
+     INNER JOIN oferta_laboral o ON o.id_oferta = p.id_oferta
+     INNER JOIN empresa em ON em.id_usuario = o.id_empresa
+     INNER JOIN egresado e ON e.id_usuario = p.id_egresado
+     INNER JOIN carrera c ON c.id_carrera = e.id_carrera
+     WHERE o.id_empresa = ?
+     ORDER BY p.fecha_postulacion DESC, p.id_postulacion DESC
+     LIMIT 4`,
+    [idEmpresa]
+  );
+
+  const counts = (countRows as Record<string, number | null>[])[0] ?? {};
+
+  return {
+    profile: (profileRows as unknown[])[0] ?? null,
+    counts: {
+      totalOfertas: Number(counts.totalOfertas ?? 0),
+      ofertasActivas: Number(counts.ofertasActivas ?? 0),
+      ofertasCerradas: Number(counts.ofertasCerradas ?? 0),
+      totalPostulaciones: Number(counts.totalPostulaciones ?? 0),
+      postulacionesPendientes: Number(counts.postulacionesPendientes ?? 0),
+      postulacionesAceptadas: Number(counts.postulacionesAceptadas ?? 0),
+      postulacionesRechazadas: Number(counts.postulacionesRechazadas ?? 0),
+      postulacionesEnProceso: Number(counts.postulacionesEnProceso ?? 0),
+    },
+    ofertasActivas: ofertasRows,
+    ultimasPostulaciones: postulacionRows,
+  };
+}
+
+export async function listEmpresaOfertas(
+  idEmpresa: number,
+  pagination: PaginationInput,
+  filters: EmpresaOfertasFilters
+): Promise<PaginatedResult<unknown>> {
+  const where = ["o.id_empresa = ?"];
+  const params: unknown[] = [idEmpresa];
+
+  if (filters.estado) {
+    where.push("o.estado_oferta = ?");
+    params.push(filters.estado);
+  }
+
+  if (filters.modalidad) {
+    where.push("o.modalidad = ?");
+    params.push(filters.modalidad);
+  }
+
+  const whereSql = `WHERE ${where.join(" AND ")}`;
+  const [countRows] = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM oferta_laboral o
+     ${whereSql}`,
+    params
+  );
+
+  const [rows] = await pool.query(
+    `SELECT
+       o.id_oferta,
+       o.titulo,
+       o.descripcion,
+       o.puesto,
+       o.area,
+       o.ubicacion,
+       o.modalidad,
+       o.tipo_contrato,
+       o.salario,
+       o.requisitos,
+       o.fecha_publicacion,
+       o.fecha_cierre,
+       o.estado_oferta,
+       em.razon_social AS empresa
+     FROM oferta_laboral o
+     INNER JOIN empresa em ON em.id_usuario = o.id_empresa
+     ${whereSql}
+     ORDER BY o.fecha_publicacion DESC, o.id_oferta DESC
+     LIMIT ? OFFSET ?`,
+    [...params, pagination.pageSize, pagination.offset]
+  );
+
+  return {
+    items: rows,
+    total: Number((countRows as { total: number }[])[0]?.total ?? 0),
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+  };
+}
+
+export async function listEmpresaPostulaciones(
+  idEmpresa: number,
+  pagination: PaginationInput,
+  filters: EmpresaPostulacionesFilters
+): Promise<PaginatedResult<unknown>> {
+  const where = ["o.id_empresa = ?"];
+  const params: unknown[] = [idEmpresa];
+
+  if (filters.search) {
+    where.push("(e.nombre_egresado LIKE ? OR e.apellidos_egresado LIKE ? OR c.nombre_carrera LIKE ? OR o.titulo LIKE ?)");
+    const q = `%${filters.search}%`;
+    params.push(q, q, q, q);
+  }
+
+  if (filters.estado) {
+    where.push("p.estado_postulacion = ?");
+    params.push(filters.estado);
+  }
+
+  const whereSql = `WHERE ${where.join(" AND ")}`;
+  const [countRows] = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM postulacion p
+     INNER JOIN oferta_laboral o ON o.id_oferta = p.id_oferta
+     INNER JOIN egresado e ON e.id_usuario = p.id_egresado
+     INNER JOIN carrera c ON c.id_carrera = e.id_carrera
+     ${whereSql}`,
+    params
+  );
+
+  const [rows] = await pool.query(
+    `SELECT
+       p.id_postulacion,
+       CONCAT(e.nombre_egresado, ' ', e.apellidos_egresado) AS egresado,
+       c.nombre_carrera AS carrera,
+       o.titulo AS oferta,
+       em.razon_social AS empresa,
+       p.fecha_postulacion,
+       p.estado_postulacion,
+       p.observaciones,
+       p.cv_adjunto
+     FROM postulacion p
+     INNER JOIN oferta_laboral o ON o.id_oferta = p.id_oferta
+     INNER JOIN empresa em ON em.id_usuario = o.id_empresa
+     INNER JOIN egresado e ON e.id_usuario = p.id_egresado
+     INNER JOIN carrera c ON c.id_carrera = e.id_carrera
+     ${whereSql}
+     ORDER BY p.fecha_postulacion DESC, p.id_postulacion DESC
+     LIMIT ? OFFSET ?`,
+    [...params, pagination.pageSize, pagination.offset]
+  );
+
+  return {
+    items: rows,
+    total: Number((countRows as { total: number }[])[0]?.total ?? 0),
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+  };
+}
+
+export async function getEmpresaPerfil(idEmpresa: number) {
+  const [rows] = await pool.execute(
+    `SELECT
+       em.id_usuario,
+       em.ruc,
+       em.razon_social,
+       em.nombre_comercial,
+       em.sector,
+       em.direccion,
+       em.telefono,
+       em.pagina_web,
+       u.correo,
+       u.estado_usuario
+     FROM empresa em
+     INNER JOIN usuario u ON u.id_usuario = em.id_usuario
+     WHERE em.id_usuario = ?`,
+    [idEmpresa]
+  );
+
+  return (rows as unknown[])[0] ?? null;
+}

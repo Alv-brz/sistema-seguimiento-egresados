@@ -18,6 +18,9 @@ Estado aprobado al 2026-06-26:
 - Documentacion tecnica permanente creada en raiz.
 - Capa base de consumo API creada.
 - Pantallas de administrador conectadas a endpoints reales de lectura MySQL.
+- Paginacion y filtros reales agregados a listados de administrador.
+- Pantallas de empresa conectadas a endpoints reales de lectura MySQL filtrados por JWT.
+- Pantallas de egresado conectadas a endpoints reales de lectura MySQL filtrados por JWT.
 
 ## Fases Implementadas
 
@@ -113,7 +116,7 @@ Archivos modificados:
 
 ### Fase 4 - Capa API y Lectura Real para Administrador
 
-Estado: implementada en esta sesion.
+Estado: implementada y mejorada en esta sesion.
 
 Incluye:
 
@@ -122,10 +125,12 @@ Incluye:
 - Endpoints backend protegidos con `requireAuth` y `requireRole`.
 - Endpoints de solo lectura para dashboard admin, egresados, empresas, ofertas, encuestas, auditoria y notificaciones.
 - Sustitucion de mocks por datos reales de MySQL solo en pantallas de administrador.
-- Empresa y egresado conservan comportamiento mock.
+- En esa fase Empresa y Egresado aun conservaban comportamiento mock; fueron conectados en fases posteriores.
 - No se implementaron INSERT, UPDATE, DELETE ni CRUD.
 - No se modifico `Database/`.
-- Listados iniciales limitados a 500 filas hasta implementar paginacion real.
+- Paginacion real desde backend/frontend para egresados, empresas, ofertas, encuestas, auditoria y notificaciones.
+- Filtros/busqueda server-side cuando ya existian visualmente.
+- Botones de editar, eliminar, cerrar oferta, guardar, exportar y marcar notificaciones en admin muestran aviso de fase CRUD.
 
 Archivos creados:
 
@@ -151,10 +156,76 @@ Archivos creados:
 - `backend/src/modules/notificaciones/notificaciones.routes.ts`
 - `backend/src/modules/notificaciones/notificaciones.controller.ts`
 - `backend/src/modules/notificaciones/notificaciones.service.ts`
+- `backend/src/utils/pagination.ts`
 
 Archivos modificados:
 
 - `backend/src/app.ts`
+- `src/app/App.tsx`
+- `src/app/api.ts`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+### Fase 5 - Lectura Real para Empresa
+
+Estado: implementada en esta sesion.
+
+Incluye:
+
+- Endpoints backend de solo lectura para rol `empresa`.
+- Dashboard empresa con metricas reales de la empresa autenticada.
+- Mis ofertas con datos reales, paginacion y filtros por estado/modalidad.
+- Postulaciones recibidas con datos reales, paginacion, busqueda y filtro por estado.
+- Perfil empresa con datos reales de tablas `empresa` y `usuario`.
+- Notificaciones reales del usuario empresa autenticado.
+- Todas las consultas de empresa filtran por `id_usuario` del JWT.
+- No se implementaron INSERT, UPDATE, DELETE ni CRUD.
+- No se modifico `Database/`.
+- Botones de publicar, guardar, cerrar, editar, eliminar y cambiar estado muestran aviso de fase CRUD.
+
+Archivos creados:
+
+- `backend/src/modules/empresa/empresa.routes.ts`
+- `backend/src/modules/empresa/empresa.controller.ts`
+- `backend/src/modules/empresa/empresa.service.ts`
+
+Archivos modificados:
+
+- `backend/src/app.ts`
+- `src/app/api.ts`
+- `src/app/App.tsx`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+### Fase 6 - Lectura Real para Egresado
+
+Estado: implementada en esta sesion.
+
+Incluye:
+
+- Endpoints backend de solo lectura para rol `egresado`.
+- Dashboard egresado con perfil real, total de postulaciones, estado laboral actual, ultima empresa y ofertas activas.
+- Bolsa laboral con ofertas activas reales, paginacion y filtros por busqueda/modalidad/tipo de contrato.
+- Mis postulaciones con datos reales, paginacion y filtro por estado.
+- Mi perfil con datos reales de `usuario`, `egresado`, `carrera` y `facultad`.
+- Historial laboral real del egresado autenticado con paginacion.
+- Ultima encuesta real asociada al egresado y fecha de proxima disponibilidad.
+- Notificaciones reales del usuario egresado autenticado.
+- Todas las consultas personales de egresado filtran por `id_usuario` del JWT.
+- No se implementaron INSERT, UPDATE, DELETE ni CRUD.
+- No se modifico `Database/`.
+- Botones de postular, guardar, crear, editar, eliminar, enviar encuesta y marcar notificaciones muestran aviso de fase CRUD o quedan sin escritura.
+
+Archivos creados:
+
+- `backend/src/modules/egresado/egresado.routes.ts`
+- `backend/src/modules/egresado/egresado.controller.ts`
+- `backend/src/modules/egresado/egresado.service.ts`
+
+Archivos modificados:
+
+- `backend/src/app.ts`
+- `src/app/api.ts`
 - `src/app/App.tsx`
 - `AI_CONTEXT.md`
 - `PROJECT_STATUS.md`
@@ -182,15 +253,26 @@ Archivos modificados:
 - Gestion de encuestas con datos reales desde MySQL.
 - Auditoria con datos reales desde MySQL.
 - Notificaciones de administrador desde MySQL.
+- Paginacion real en listados admin.
+- Filtros/busqueda reales en listados admin.
+- Avisos claros para acciones aun no disponibles hasta CRUD.
+- Dashboard empresa con datos reales.
+- Mis ofertas de empresa con datos reales y alcance por JWT.
+- Postulaciones recibidas de empresa con datos reales y alcance por JWT.
+- Perfil empresa con datos reales.
+- Notificaciones reales para empresa.
+- Dashboard egresado con datos reales.
+- Bolsa laboral de egresado con ofertas activas reales.
+- Mis postulaciones de egresado con datos reales y alcance por JWT.
+- Perfil egresado con datos reales.
+- Historial laboral de egresado con datos reales.
+- Encuesta de seguimiento con ultima encuesta real.
+- Notificaciones reales para egresado.
 
 ## Funcionalidades Pendientes
 
 - Consumir `GET /api/auth/me` al iniciar para validar sesion contra backend.
-- Reemplazar datos mock por endpoints reales en pantallas de empresa y egresado.
-- Endpoints backend para postulaciones.
-- Endpoints backend para historial laboral.
 - Endpoints backend para reportes.
-- Paginacion, busqueda y filtros desde backend.
 - Validacion de entrada por modulo.
 - Proteccion de permisos por rol y por propietario del recurso.
 - Manejo formal de variables `.env` y documentacion de ejemplo si falta.
@@ -198,13 +280,12 @@ Archivos modificados:
 
 ## Fases Pendientes Recomendadas
 
-### Fase 5 - Validacion de Sesion y Paginacion Admin
+### Fase 7 - Validacion de Sesion
 
 Objetivo:
 
 - Validar sesion con `GET /api/auth/me` al cargar la app.
 - Manejar token invalido expirado cerrando sesion.
-- Agregar paginacion, busqueda y filtros desde backend para listados admin.
 - Mantener endpoints de solo lectura.
 
 Archivos probables:
@@ -212,23 +293,8 @@ Archivos probables:
 - `src/app/auth.ts`
 - `src/app/api.ts`
 - `src/app/App.tsx`
-- servicios backend de listados admin
 
-### Fase 6 - Lectura Real para Empresa y Egresado
-
-Objetivo:
-
-- Implementar endpoints GET para reemplazar mocks de bajo riesgo en empresa y egresado.
-- Prioridad sugerida: ofertas por empresa, postulaciones por empresa, perfil empresa, bolsa laboral, postulaciones del egresado e historial laboral.
-- Preferir vistas existentes cuando correspondan.
-
-Archivos probables:
-
-- nuevos modulos en `backend/src/modules/*`
-- `src/app/App.tsx` o componentes extraidos
-- cliente API frontend
-
-### Fase 7 - Escrituras Controladas
+### Fase 8 - Escrituras Controladas
 
 Objetivo:
 
@@ -238,7 +304,7 @@ Objetivo:
 - Usar procedimientos almacenados existentes si calzan.
 - Respetar triggers y errores `SIGNAL`.
 
-### Fase 8 - Modularizacion Frontend
+### Fase 9 - Modularizacion Frontend
 
 Objetivo:
 
@@ -255,8 +321,12 @@ Estado:
 - Arquitectura documentada.
 - Backend listo para nuevas rutas autenticadas.
 - Frontend admin consume endpoints reales de lectura.
+- Frontend empresa consume endpoints reales de lectura.
+- Frontend egresado consume endpoints reales de lectura.
+- Listados admin tienen paginacion/filtros reales.
+- Acciones de escritura/exportacion muestran aviso de fase CRUD.
 - Base de datos intacta.
-- Proxima fase recomendada: Fase 5, validacion de sesion y paginacion admin.
+- Proxima fase recomendada: Fase 7, validacion de sesion.
 
 ## Archivos Importantes por Area
 
@@ -285,6 +355,8 @@ Backend:
 - `backend/src/modules/encuestas/*`: lectura admin de encuestas.
 - `backend/src/modules/auditoria/*`: lectura de auditoria.
 - `backend/src/modules/notificaciones/*`: lectura de notificaciones.
+- `backend/src/modules/empresa/*`: lectura por JWT para dashboard, ofertas, postulaciones y perfil empresa.
+- `backend/src/modules/egresado/*`: lectura por JWT para dashboard, bolsa laboral, postulaciones, perfil, historial y encuesta egresado.
 
 Base de datos:
 
