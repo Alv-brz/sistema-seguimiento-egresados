@@ -6,6 +6,21 @@ export type NotificacionesFilters = {
   estado?: string;
 };
 
+export type NotificacionInput = {
+  titulo: string;
+  mensaje: string;
+};
+
+export async function createNotificacion(id_usuario: number, input: NotificacionInput) {
+  const [result] = await pool.execute(
+    `INSERT INTO notificacion(id_usuario, titulo, mensaje, leido, fecha_envio)
+     VALUES (?, ?, ?, FALSE, NOW())`,
+    [id_usuario, input.titulo, input.mensaje]
+  );
+
+  return result;
+}
+
 export async function listNotificaciones(
   id_usuario: number,
   pagination: PaginationInput,
@@ -77,6 +92,15 @@ export async function markAllNotificacionesLeidas(id_usuario: number) {
   const [result] = await pool.execute(
     "UPDATE notificacion SET leido = TRUE WHERE id_usuario = ? AND leido = FALSE",
     [id_usuario]
+  );
+
+  return result;
+}
+
+export async function deleteNotificacion(id_usuario: number, id_notificacion: number) {
+  const [result] = await pool.execute(
+    "DELETE FROM notificacion WHERE id_notificacion = ? AND id_usuario = ?",
+    [id_notificacion, id_usuario]
   );
 
   return result;

@@ -330,6 +330,7 @@ export const adminApi = {
   cambiarEstadoEmpresa: (id: number, estado_usuario: "Activo" | "Inactivo") => apiSend<void>("PATCH", `/empresas/${id}/estado`, { estado_usuario }),
   eliminarEmpresa: (id: number) => apiSend<void>("DELETE", `/empresas/${id}`),
   ofertas: (params?: ListParams) => apiGet<PaginatedResponse<AdminOferta>>("/ofertas", params),
+  crearOferta: (body: Partial<AdminOferta>) => apiSend<{ id_oferta: number }>("POST", "/ofertas", body),
   actualizarOferta: (id: number, body: Partial<AdminOferta>) => apiSend<void>("PUT", `/ofertas/${id}`, body),
   cambiarEstadoOferta: (id: number, estado_oferta: "Activa" | "Cerrada") => apiSend<void>("PATCH", `/ofertas/${id}/estado`, { estado_oferta }),
   eliminarOferta: (id: number) => apiSend<void>("DELETE", `/ofertas/${id}`),
@@ -341,6 +342,8 @@ export const adminApi = {
   notificacionesNoLeidas: () => apiGet<{ unread: number }>("/notificaciones/unread-count"),
   marcarNotificacionLeida: (id: number) => apiSend<void>("PATCH", `/notificaciones/${id}/leida`),
   marcarTodasNotificacionesLeidas: () => apiSend<void>("PATCH", "/notificaciones/leer-todas"),
+  crearNotificacion: (body: Pick<ApiNotificacion, "titulo" | "mensaje">) => apiSend<{ id_notificacion: number }>("POST", "/notificaciones", body),
+  eliminarNotificacion: (id: number) => apiSend<void>("DELETE", `/notificaciones/${id}`),
 };
 
 export const empresaApi = {

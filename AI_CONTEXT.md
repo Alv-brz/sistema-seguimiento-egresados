@@ -135,6 +135,7 @@ El backend es una API REST modular bajo `/api`:
 - `PATCH /api/empresas/:id/estado`: desactiva o reactiva la cuenta de la empresa cambiando `usuario.estado_usuario`.
 - `DELETE /api/empresas/:id`: elimina empresa + usuario solo si la integridad referencial lo permite.
 - `GET /api/ofertas`: listado de lectura para gestion admin de ofertas.
+- `POST /api/ofertas`: crea una oferta desde administrador para una empresa activa.
 - `PUT /api/ofertas/:id`: actualiza cualquier oferta desde administrador.
 - `PATCH /api/ofertas/:id/estado`: cambia una oferta entre `Activa` y `Cerrada` desde administrador.
 - `DELETE /api/ofertas/:id`: elimina oferta solo si no tiene postulaciones asociadas.
@@ -144,6 +145,8 @@ El backend es una API REST modular bajo `/api`:
 - `GET /api/notificaciones/unread-count`: contador real de notificaciones no leidas del usuario autenticado.
 - `PATCH /api/notificaciones/:id/leida`: marca como leida una notificacion del usuario autenticado.
 - `PATCH /api/notificaciones/leer-todas`: marca como leidas todas las notificaciones del usuario autenticado.
+- `POST /api/notificaciones`: crea una notificacion propia desde administrador.
+- `DELETE /api/notificaciones/:id`: elimina una notificacion propia desde administrador.
 - `GET /api/empresa/dashboard`: metricas y resumen de la empresa autenticada.
 - `GET /api/empresa/ofertas`: ofertas de la empresa autenticada.
 - `GET /api/empresa/postulaciones`: postulaciones recibidas por ofertas de la empresa autenticada.
@@ -169,7 +172,7 @@ El backend es una API REST modular bajo `/api`:
 - `DELETE /api/egresado/historial/:id`: elimina historial laboral propio.
 - `POST /api/egresado/encuesta`: registra encuesta de seguimiento y la asocia al egresado autenticado.
 
-Los endpoints de lectura inicial estan implementados para pantallas de administrador, empresa y egresado. El CRUD de Empresa ya esta cerrado para publicar, editar, cerrar, reactivar y eliminar ofertas propias, cambiar estado de postulaciones propias y actualizar perfil propio. El CRUD de Egresado ya esta cerrado para postulaciones, perfil, historial laboral, encuesta de seguimiento y notificaciones. CRUD Administrador Fase A esta implementado para configuracion global, egresados, empresas y ofertas. La gestion de encuestas de administrador es solo lectura/detalle: las encuestas respondidas forman parte del historial del egresado y no se eliminan.
+Los endpoints de lectura inicial estan implementados para pantallas de administrador, empresa y egresado. El CRUD de Empresa ya esta cerrado para publicar, editar, cerrar, reactivar y eliminar ofertas propias, cambiar estado de postulaciones propias y actualizar perfil propio. El CRUD de Egresado ya esta cerrado para postulaciones, perfil, historial laboral, encuesta de seguimiento y notificaciones. CRUD Administrador Fase B esta implementado para egresados, empresas, ofertas, encuestas historicas y notificaciones propias del administrador. La gestion de encuestas de administrador es solo lectura/detalle: las encuestas respondidas forman parte del historial del egresado y no se eliminan.
 
 ## Flujo Frontend/Backend
 
@@ -463,6 +466,8 @@ Base de datos:
 - La eliminacion de ofertas desde administrador tambien bloquea con HTTP 409 si existen postulaciones asociadas y devuelve el mensaje: `No se puede eliminar una oferta con postulaciones asociadas. Puede cerrarla.`
 - La gestion admin de egresados y empresas mantiene eliminacion solo si MySQL lo permite, pero la alternativa principal para registros con historial es desactivar/reactivar la cuenta actualizando `usuario.estado_usuario`.
 - La gestion admin de encuestas no muestra ni expone eliminacion; solo permite ver detalle porque las respuestas forman parte del historial del egresado.
+- La gestion admin de ofertas permite crear ofertas para empresas activas, editar, cerrar/reactivar y eliminar solo si no existen postulaciones asociadas.
+- La gestion admin de notificaciones permite crear, listar, ver, buscar, filtrar, marcar como leida y eliminar notificaciones propias del administrador. Empresa y Egresado solo pueden listar/marcar sus propias notificaciones.
 - La pantalla `Mis Ofertas` de empresa edita ofertas con modal/formulario completo, no con `prompt()`, y permite alternar `Activa`/`Cerrada` desde la tabla.
 - Estados permitidos al cambiar postulaciones desde empresa: `Pendiente`, `Aceptado`, `Rechazado`. No usar `En Proceso` para nuevas actualizaciones.
 - Las pantallas de egresado ya consumen datos reales de MySQL para dashboard, bolsa laboral, mis postulaciones, perfil, historial laboral, encuesta y notificaciones.

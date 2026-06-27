@@ -21,6 +21,56 @@ export type AdminOfertaInput = {
   estado_oferta: "Activa" | "Cerrada";
 };
 
+export async function createOferta(idEmpresa: number, input: AdminOfertaInput) {
+  const [empresaRows] = await pool.execute(
+    `SELECT em.id_usuario
+     FROM empresa em
+     INNER JOIN usuario u ON u.id_usuario = em.id_usuario
+     WHERE em.id_usuario = ? AND u.estado_usuario = 'Activo'
+     LIMIT 1`,
+    [idEmpresa]
+  );
+
+  if ((empresaRows as unknown[]).length === 0) {
+    return { ok: false as const, reason: "empresa-invalida" };
+  }
+
+  const [result] = await pool.execute(
+    `INSERT INTO oferta_laboral(
+       titulo,
+       descripcion,
+       puesto,
+       area,
+       ubicacion,
+       modalidad,
+       tipo_contrato,
+       salario,
+       requisitos,
+       fecha_publicacion,
+       fecha_cierre,
+       estado_oferta,
+       id_empresa
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, ?, ?)`,
+    [
+      input.titulo,
+      input.descripcion,
+      input.puesto,
+      input.area,
+      input.ubicacion,
+      input.modalidad,
+      input.tipo_contrato,
+      input.salario,
+      input.requisitos,
+      input.fecha_cierre,
+      input.estado_oferta,
+      idEmpresa,
+    ]
+  );
+
+  return { ok: true as const, result };
+}
+
 export async function listOfertas(
   pagination: PaginationInput,
   filters: OfertasFilters

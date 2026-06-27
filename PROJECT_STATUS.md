@@ -29,6 +29,7 @@ Estado aprobado al 2026-06-26:
 - Ajuste de coherencia previo a CRUD Administrador Fase B implementado: encuestas sin eliminacion, cuentas admin desactivables/reactivables y ofertas no eliminables si tienen postulaciones.
 - Mejora general de usabilidad implementada: buscadores server-side en listados grandes, filtros visibles reducidos a los utiles y limpieza de etiquetas tecnicas SQL en formularios/vistas principales.
 - Dashboard y Reportes corregidos: KPIs/graficos usan backend real, Reportes envia filtros al backend y actualiza datos filtrados.
+- CRUD Administrador Fase B implementado: ofertas admin ya pueden crearse para empresas activas y notificaciones admin tienen crear/listar/marcar/eliminar.
 
 ## Fases Implementadas
 
@@ -606,6 +607,58 @@ Verificacion realizada:
 - Prueba HTTP real con JWT admin: combinacion `facultad + carrera + anio + estadoLaboral` cambia KPIs y graficos.
 - Prueba HTTP real con JWT admin: combinacion sin registros devuelve KPIs en cero y series vacias para estado vacio.
 
+### Fase 15 - CRUD Administrador Fase B
+
+Estado: implementada en esta sesion.
+
+Incluye:
+
+- Revision de CRUD administrador existentes para egresados, empresas, ofertas, encuestas, notificaciones y usuarios/admin aplicables.
+- Egresados mantiene crear, listar, ver detalle, editar, buscar, filtrar, paginar, estado vacio, eliminar solo si la integridad lo permite y desactivar/reactivar si tiene historial.
+- Empresas mantiene crear, listar, ver detalle, editar, buscar, filtrar, paginar, estado vacio, eliminar solo si la integridad lo permite y desactivar/reactivar si tiene relaciones.
+- Ofertas completa creacion desde administrador para empresas activas, ademas de listar, ver detalle, editar, cerrar/reactivar, buscar, filtrar, paginar y eliminar solo si no tiene postulaciones.
+- Ofertas con postulaciones siguen bloqueando eliminacion con mensaje claro: `No se puede eliminar una oferta con postulaciones asociadas. Puede cerrarla.`
+- Encuestas quedan como historico solo lectura/detalle, con busqueda, filtro, paginacion y estado vacio; no se reintrodujo eliminacion.
+- Notificaciones de administrador permiten crear, listar, buscar, filtrar, paginar, marcar una/todas como leidas y eliminar notificaciones propias.
+- Empresa y Egresado conservan notificaciones propias solo para listar/marcar, sin acciones administrativas.
+- No se implemento CRUD separado de usuarios/admin porque no existe pantalla administrativa ni requisito funcional concreto fuera de las tablas hijas ya gestionadas.
+- No se modifico `Database/`, estilos globales ni diseno general.
+- Se mantuvieron JWT, roles, seguridad, auditoria/triggers existentes, validaciones `SIGNAL`, toasts y modales internos.
+
+Endpoints backend agregados:
+
+- `POST /api/ofertas`
+- `POST /api/notificaciones`
+- `DELETE /api/notificaciones/:id`
+
+Archivos modificados:
+
+- `backend/src/modules/ofertas/ofertas.routes.ts`
+- `backend/src/modules/ofertas/ofertas.controller.ts`
+- `backend/src/modules/ofertas/ofertas.service.ts`
+- `backend/src/modules/notificaciones/notificaciones.routes.ts`
+- `backend/src/modules/notificaciones/notificaciones.controller.ts`
+- `backend/src/modules/notificaciones/notificaciones.service.ts`
+- `src/app/api.ts`
+- `src/app/App.tsx`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+Verificacion realizada:
+
+- `npm.cmd run build` en `backend/`: correcto.
+- `npm.cmd run build` en frontend: correcto tras ejecutar fuera del sandbox por restriccion de acceso en la ruta de OneDrive; Vite solo reporto advertencia de chunk grande.
+- Prueba HTTP real con JWT admin: listar/buscar/filtrar egresados.
+- Prueba HTTP real con JWT admin: crear, editar, desactivar, reactivar y eliminar egresado temporal sin relaciones.
+- Prueba HTTP real con JWT admin: crear, editar, desactivar, reactivar y eliminar empresa temporal sin relaciones.
+- Prueba HTTP real con JWT admin: crear, editar, cerrar, reactivar y eliminar oferta temporal sin postulaciones.
+- Prueba HTTP real con JWT admin: intento de eliminar oferta con postulaciones responde 409 y queda bloqueado.
+- Prueba HTTP real con JWT admin: encuestas listan/buscan como historico sin eliminacion.
+- Prueba HTTP real con JWT admin: crear, listar, marcar como leida y eliminar notificacion temporal propia.
+- Prueba HTTP real con JWT admin: Dashboard/Reportes siguen respondiendo con filtros.
+- `rg` confirmo que no existen `alert()`, `confirm()` ni `prompt()` en `src/` ni `backend/`.
+- Revision de etiquetas visibles: no se agregaron tipos SQL ni nombres tecnicos visibles; coincidencias restantes son propiedades internas de datos.
+
 ## Funcionalidades Terminadas
 
 - Aplicacion frontend arranca con Vite.
@@ -667,6 +720,7 @@ Verificacion realizada:
 - Etiquetas y ayudas visibles limpiadas para evitar tipos SQL y nombres tecnicos en la interfaz.
 - Dashboard de administrador con etiquetas amigables y datos reales desde backend.
 - Reportes y Estadisticas con filtros reales enviados al backend y KPIs/graficos filtrados.
+- CRUD Administrador Fase B para ofertas y notificaciones, manteniendo reglas de integridad de egresados, empresas y encuestas.
 
 ## Funcionalidades Pendientes
 
@@ -679,7 +733,7 @@ Verificacion realizada:
 
 ## Fases Pendientes Recomendadas
 
-### Fase 15 - Validacion de Sesion
+### Fase 16 - Validacion de Sesion
 
 Objetivo:
 
@@ -692,14 +746,6 @@ Archivos probables:
 - `src/app/auth.ts`
 - `src/app/api.ts`
 - `src/app/App.tsx`
-
-### Fase 16 - CRUD Administrador Fase B
-
-Objetivo:
-
-- Completar escrituras pendientes de administrador no cubiertas por Fase A si se aprueban.
-- Usar procedimientos almacenados existentes si calzan.
-- Respetar triggers y errores `SIGNAL`.
 
 ### Fase 17 - Modularizacion Frontend
 
@@ -728,13 +774,14 @@ Estado:
 - Ajuste de coherencia de acciones queda implementado y espera aprobacion del usuario antes de iniciar CRUD Administrador Fase B.
 - Mejora de usabilidad de buscadores, filtros y etiquetas queda implementada y espera aprobacion del usuario antes de iniciar CRUD Administrador Fase B.
 - Dashboard y Reportes quedan corregidos con filtros reales desde backend.
+- CRUD Administrador Fase B queda implementado y validado con pruebas HTTP reales.
 - Refresco de pagina restaura la ultima pantalla valida del rol autenticado.
 - Sistema global de mensajes y confirmaciones activo en toda la aplicacion; no quedan ventanas nativas del navegador.
 - Listados admin, empresa y egresado principales tienen paginacion, busqueda y filtros reales donde corresponde.
 - Reportes y Estadisticas actualiza KPIs y graficos al aplicar filtros.
-- Acciones de escritura/exportacion no implementadas fuera de Empresa, Egresado y Administrador Fase A muestran aviso de fase CRUD.
+- Acciones de escritura/exportacion no implementadas fuera de Empresa, Egresado y Administrador aprobado muestran aviso informativo.
 - Base de datos intacta.
-- Proxima fase recomendada: esperar aprobacion; luego validacion de sesion o CRUD Administrador Fase B si el usuario lo autoriza.
+- Proxima fase recomendada: validacion de sesion con `GET /api/auth/me` o modularizacion frontend si el usuario lo autoriza.
 
 ## Archivos Importantes por Area
 

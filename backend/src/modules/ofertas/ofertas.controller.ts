@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import type { ResultSetHeader } from "mysql2";
 import { asyncHandler } from "../../middleware/errorHandler.js";
 import {
+  createOferta,
   deleteOferta,
   listOfertas,
   updateOferta,
@@ -31,7 +32,11 @@ function parsePositiveId(value: string | undefined): number | null {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-function parseInput(body: Record<string, unknown>, res: Response): AdminOfertaInput | null {
+function parseInput(
+  body: Record<string, unknown>,
+  res: Response,
+  options: { requireFutureCierre?: boolean } = {}
+): AdminOfertaInput | null {
   const salario = body.salario === null || body.salario === "" || body.salario === undefined ? null : Number(body.salario);
   const estado = normalizeRequiredString(body.estado_oferta) as AdminOfertaInput["estado_oferta"];
   const input: AdminOfertaInput = {
@@ -61,6 +66,16 @@ function parseInput(body: Record<string, unknown>, res: Response): AdminOfertaIn
     return null;
   }
 
+  if (options.requireFutureCierre) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const fechaCierre = new Date(`${input.fecha_cierre}T00:00:00`);
+    if (Number.isNaN(fechaCierre.getTime()) || fechaCierre <= today) {
+      badRequest(res, "La fecha de cierre debe ser posterior a la publicación.");
+      return null;
+    }
+  }
+
   return input;
 }
 
@@ -72,6 +87,27 @@ export const ofertasController = {
       modalidad: getExactFilter(_req.query.modalidad, "Todos"),
     });
     res.json({ ok: true, data });
+  }),
+
+  create: asyncHandler(async (req: Request, res: Response) => {
+    const idEmpresaRaw = Number((req.body as { id_empresa?: unknown }).id_empresa);
+    const idEmpresa = Number.isInteger(idEmpresaRaw) && idEmpresaRaw > 0 ? idEmpresaRaw : null;
+    if (!idEmpresa) {
+      badRequest(res, "Selecciona una empresa activa para publicar la oferta.");
+      return;
+    }
+
+    const input = parseInput(req.body as Record<string, unknown>, res, { requireFutureCierre: true });
+    if (!input) return;
+
+    const createResult = await createOferta(idEmpresa, input);
+    if (!createResult.ok) {
+      res.status(422).json({ ok: false, error: "La empresa seleccionada no existe o está inactiva." });
+      return;
+    }
+
+    const result = createResult.result as ResultSetHeader;
+    res.status(201).json({ ok: true, data: { id_oferta: result.insertId } });
   }),
 
   update: asyncHandler(async (req: Request, res: Response) => {

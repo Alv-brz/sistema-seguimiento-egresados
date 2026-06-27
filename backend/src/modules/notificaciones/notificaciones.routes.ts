@@ -11,6 +11,13 @@ router.get(
   notificacionesController.list
 );
 
+router.post(
+  "/",
+  requireAuth,
+  requireRole("admin"),
+  notificacionesController.create
+);
+
 router.get(
   "/unread-count",
   requireAuth,
@@ -30,6 +37,13 @@ router.patch(
   requireAuth,
   requireRole("admin", "empresa", "egresado"),
   notificacionesController.markRead
+);
+
+router.delete(
+  "/:id",
+  requireAuth,
+  requireRole("admin"),
+  notificacionesController.delete
 );
 
 export default router;

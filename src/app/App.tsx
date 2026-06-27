@@ -565,7 +565,7 @@ function readOfertaForm(formElement: HTMLFormElement): Partial<AdminOferta> | nu
     return null;
   }
 
-  return {
+  const payload: Partial<AdminOferta> = {
     titulo: String(form.get("titulo") ?? "").trim(),
     descripcion: String(form.get("descripcion") ?? "").trim(),
     puesto: String(form.get("puesto") ?? "").trim(),
@@ -578,6 +578,12 @@ function readOfertaForm(formElement: HTMLFormElement): Partial<AdminOferta> | nu
     fecha_cierre: String(form.get("fecha_cierre") ?? "").trim(),
     estado_oferta: String(form.get("estado_oferta") ?? "").trim(),
   };
+
+  if (form.has("id_empresa")) {
+    payload.id_empresa = Number(form.get("id_empresa"));
+  }
+
+  return payload;
 }
 
 function readAdminEgresadoForm(formElement: HTMLFormElement): Record<string, unknown> {
@@ -1312,7 +1318,9 @@ function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScree
   const { toast, requestConfirmation } = useFeedback();
   const [selected, setSelected] = useState<AdminOferta | null>(null);
   const [editing, setEditing] = useState<AdminOferta | null>(null);
+  const [creating, setCreating] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [savingCreate, setSavingCreate] = useState(false);
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
   const [modalidadFiltro, setModalidadFiltro] = useState("Todos");
@@ -1331,6 +1339,14 @@ function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScree
   );
   const ofertasPage = remotePage;
   const filtered = ofertasPage.items;
+  const empresasOfertaFallback: PaginatedResponse<AdminEmpresa> = { items: [], total: 0, page: 1, pageSize: 100 };
+  const empresasOfertaPage = usePaginatedApiData(
+    useApi,
+    () => adminApi.empresas({ page: 1, pageSize: 100, estado: "Activo" }),
+    empresasOfertaFallback,
+    [useApi, refreshKey]
+  );
+  const empresasActivas = empresasOfertaPage.items;
 
   useEffect(() => {
     setPage(1);
@@ -1338,6 +1354,29 @@ function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScree
 
   function handleEditOferta(oferta: AdminOferta) {
     setEditing(oferta);
+  }
+
+  async function handleCreateSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const payload = readOfertaForm(event.currentTarget);
+    if (!payload) return;
+    if (!payload.id_empresa || !Number.isInteger(payload.id_empresa) || payload.id_empresa <= 0) {
+      toast("warning", "Selecciona una empresa activa para publicar la oferta.");
+      return;
+    }
+
+    setSavingCreate(true);
+    try {
+      await adminApi.crearOferta(payload);
+      toast("success", "Oferta creada correctamente.");
+      setRefreshKey(k => k + 1);
+      setCreating(false);
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    } finally {
+      setSavingCreate(false);
+    }
   }
 
   async function handleEditSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -1420,6 +1459,55 @@ function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScree
 
   return (
     <div>
+      {creating && (
+        <DetailModal title="Crear Oferta Laboral" onClose={() => setCreating(false)}>
+          <form onSubmit={handleCreateSubmit}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <FormField label="Empresa" required>
+                  <select name="id_empresa" style={INP} required defaultValue="">
+                    <option value="" disabled>Seleccionar empresa activa</option>
+                    {empresasActivas.map(e => <option key={e.id_usuario} value={e.id_usuario}>{e.razon_social}</option>)}
+                  </select>
+                </FormField>
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <FormField label="Título" required hint="Máximo 150 caracteres."><input name="titulo" style={INP} maxLength={150} required /></FormField>
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <FormField label="Descripción" required><textarea name="descripcion" style={{ ...INP, height: 100, resize: "vertical" }} required /></FormField>
+              </div>
+              <FormField label="Puesto" required><input name="puesto" style={INP} required /></FormField>
+              <FormField label="Área" required><input name="area" style={INP} required /></FormField>
+              <FormField label="Ubicación" required><input name="ubicacion" style={INP} required /></FormField>
+              <FormField label="Modalidad" required>
+                <select name="modalidad" style={INP} defaultValue="Presencial" required>
+                  <option>Presencial</option><option>Remoto</option><option>Híbrido</option>
+                </select>
+              </FormField>
+              <FormField label="Tipo de contrato" required>
+                <select name="tipo_contrato" style={INP} defaultValue="Indefinido" required>
+                  <option>Indefinido</option><option>Temporal</option><option>Practicante</option>
+                </select>
+              </FormField>
+              <FormField label="Salario" hint="Campo opcional. Dejar vacío si no se desea publicar."><input name="salario" style={INP} type="number" step="0.01" /></FormField>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <FormField label="Requisitos" hint="Campo opcional."><textarea name="requisitos" style={{ ...INP, height: 80, resize: "vertical" }} /></FormField>
+              </div>
+              <FormField label="Fecha de cierre" required hint="La fecha de cierre debe ser posterior a la publicación."><input name="fecha_cierre" style={INP} type="date" required /></FormField>
+              <FormField label="Estado" required>
+                <select name="estado_oferta" style={INP} defaultValue="Activa" required>
+                  <option>Activa</option><option>Cerrada</option>
+                </select>
+              </FormField>
+            </div>
+            <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
+              <button type="submit" disabled={savingCreate || empresasActivas.length === 0} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: savingCreate || empresasActivas.length === 0 ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: savingCreate || empresasActivas.length === 0 ? 0.65 : 1 }}>{savingCreate ? "Guardando..." : "Crear oferta"}</button>
+              <Btn variant="outline" onClick={() => setCreating(false)} disabled={savingCreate}>Cancelar</Btn>
+            </div>
+          </form>
+        </DetailModal>
+      )}
       {editing && (
         <DetailModal title={`Editar Oferta: ${editing.titulo}`} onClose={() => setEditing(null)}>
           <form onSubmit={handleEditSubmit}>
@@ -1480,7 +1568,7 @@ function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScree
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title={useApi ? "Gestión de Ofertas Laborales" : "Mis Ofertas"} subtitle={`${ofertasPage.total} ofertas registradas`} action={<Btn onClick={() => useApi ? unavailableCrudAction() : setScreen?.("emp-crear-oferta")}><Plus size={14} /> Crear Oferta</Btn>} />
+      <PageHeader title={useApi ? "Gestión de Ofertas Laborales" : "Mis Ofertas"} subtitle={`${ofertasPage.total} ofertas registradas`} action={<Btn onClick={() => useApi ? setCreating(true) : setScreen?.("emp-crear-oferta")}><Plus size={14} /> Crear Oferta</Btn>} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
           <SearchBar value={search} onChange={setSearch} placeholder="Buscar por título, puesto, área, ubicación o empresa..." />
@@ -2900,12 +2988,14 @@ function EncuestaSeguimiento() {
   );
 }
 
-function Notificaciones({ useApi = false, unreadTotal, onNotificationsChanged }: { useApi?: boolean; unreadTotal?: number; onNotificationsChanged?: () => void }) {
-  const { toast } = useFeedback();
+function Notificaciones({ useApi = false, canManage = false, unreadTotal, onNotificationsChanged }: { useApi?: boolean; canManage?: boolean; unreadTotal?: number; onNotificationsChanged?: () => void }) {
+  const { toast, requestConfirmation } = useFeedback();
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("Todas");
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [creating, setCreating] = useState(false);
+  const [savingCreate, setSavingCreate] = useState(false);
   const localNotificaciones = (NOTIFICACIONES_DATA as ApiNotificacion[]).filter(n => {
     const q = search.toLowerCase();
     const leida = n.leido === true || n.leido === 1;
@@ -2961,14 +3051,74 @@ function Notificaciones({ useApi = false, unreadTotal, onNotificationsChanged }:
     setNotifs(prev => prev.map(n => ({ ...n, leido: true })));
   }
 
+  async function handleCreateNotificacion(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const titulo = String(form.get("titulo") ?? "").trim();
+    const mensaje = String(form.get("mensaje") ?? "").trim();
+    if (!titulo || !mensaje) {
+      toast("warning", "Título y mensaje son obligatorios.");
+      return;
+    }
+
+    setSavingCreate(true);
+    try {
+      await adminApi.crearNotificacion({ titulo, mensaje });
+      toast("success", "Notificación creada correctamente.");
+      setCreating(false);
+      setRefreshKey(k => k + 1);
+      onNotificationsChanged?.();
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    } finally {
+      setSavingCreate(false);
+    }
+  }
+
+  async function handleDeleteNotificacion(item: ApiNotificacion) {
+    const confirmed = await requestConfirmation({
+      title: "Eliminar notificación",
+      message: `¿Deseas eliminar la notificación "${item.titulo}"?`,
+      confirmLabel: "Eliminar",
+      variant: "danger",
+    });
+    if (!confirmed) {
+      toast("info", "Operación cancelada.");
+      return;
+    }
+
+    try {
+      await adminApi.eliminarNotificacion(item.id_notificacion);
+      toast("success", "Notificación eliminada correctamente.");
+      setRefreshKey(k => k + 1);
+      onNotificationsChanged?.();
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    }
+  }
+
   const unread = useApi ? (unreadTotal ?? 0) : notifs.filter(n => !n.leido).length;
 
   return (
     <div>
+      {creating && (
+        <DetailModal title="Crear Notificación" onClose={() => setCreating(false)}>
+          <form onSubmit={handleCreateNotificacion}>
+            <div style={{ display: "grid", gap: 18 }}>
+              <FormField label="Título" required hint="Máximo 150 caracteres."><input name="titulo" style={INP} maxLength={150} required /></FormField>
+              <FormField label="Mensaje" required><textarea name="mensaje" style={{ ...INP, height: 120, resize: "vertical" }} required /></FormField>
+            </div>
+            <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
+              <button type="submit" disabled={savingCreate} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: savingCreate ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: savingCreate ? 0.65 : 1 }}>{savingCreate ? "Guardando..." : "Crear notificación"}</button>
+              <Btn variant="outline" onClick={() => setCreating(false)} disabled={savingCreate}>Cancelar</Btn>
+            </div>
+          </form>
+        </DetailModal>
+      )}
       <PageHeader
         title="Notificaciones"
         subtitle={`${unread} sin leer`}
-        action={<Btn variant="outline" onClick={markAllRead}><CheckCircle size={14} /> Marcar todas leídas</Btn>}
+        action={<div style={{ display: "flex", gap: 8 }}>{canManage && <Btn onClick={() => setCreating(true)}><Plus size={14} /> Crear Notificación</Btn>}<Btn variant="outline" onClick={markAllRead}><CheckCircle size={14} /> Marcar todas leídas</Btn></div>}
       />
       <Card style={{ maxWidth: 760, marginBottom: 12 }}>
         <div style={{ padding: "14px 18px", display: "flex", gap: 10, alignItems: "center" }}>
@@ -3000,6 +3150,11 @@ function Notificaciones({ useApi = false, unreadTotal, onNotificationsChanged }:
               {!n.leido && (
                 <button onClick={() => markRead(n.id_notificacion)} style={{ padding: "6px 12px", border: "1px solid #E2E8F0", borderRadius: 8, background: "#fff", fontSize: 12, cursor: "pointer", fontFamily: "inherit", color: "#374151", whiteSpace: "nowrap" }}>
                   Marcar leída
+                </button>
+              )}
+              {canManage && (
+                <button onClick={() => handleDeleteNotificacion(n)} style={{ padding: "6px 10px", border: "none", borderRadius: 8, background: "#FEE2E2", fontSize: 12, cursor: "pointer", fontFamily: "inherit", color: "#991B1B", whiteSpace: "nowrap" }}>
+                  Eliminar
                 </button>
               )}
             </div>
@@ -3233,7 +3388,7 @@ function AppContent() {
       case "egr-encuesta": return <EncuestaSeguimiento />;
       case "egr-perfil": return <MiPerfil />;
       case "egr-historial": return <HistorialLaboral />;
-      case "notificaciones": return <Notificaciones useApi={role === "admin" || role === "empresa" || role === "egresado"} unreadTotal={unreadCount} onNotificationsChanged={() => setNotificationsRefreshKey(k => k + 1)} />;
+      case "notificaciones": return <Notificaciones useApi={role === "admin" || role === "empresa" || role === "egresado"} canManage={role === "admin"} unreadTotal={unreadCount} onNotificationsChanged={() => setNotificationsRefreshKey(k => k + 1)} />;
       default: return null;
     }
   }
