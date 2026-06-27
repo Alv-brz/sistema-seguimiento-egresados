@@ -513,6 +513,18 @@ function humanizeAction(value: string | null | undefined) {
   return value ? actions[value] ?? value : "—";
 }
 
+function isEmptySeries(data: Record<string, unknown>[], keys: string[]) {
+  return data.length === 0 || data.every((item) => keys.every((key) => Number(item[key] ?? 0) === 0));
+}
+
+function ChartEmptyState() {
+  return (
+    <div style={{ height: "100%", minHeight: 160, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", color: "#64748B", fontSize: 13 }}>
+      No hay información disponible para los filtros seleccionados.
+    </div>
+  );
+}
+
 function Pagination({ total, showing, page = 1, pageSize = DEFAULT_PAGE_SIZE, onPageChange }: { total: number; showing: number; page?: number; pageSize?: number; onPageChange?: (page: number) => void }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const pages = Array.from(new Set([1, Math.max(1, page - 1), page, Math.min(totalPages, page + 1), totalPages])).filter(p => p >= 1 && p <= totalPages);
@@ -830,7 +842,8 @@ function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
 
 // ─── ADMIN: Dashboard ─────────────────────────────────────────────────────────
 function AdminDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const dashboard = useApiData(true, adminApi.dashboard, ADMIN_DASHBOARD_FALLBACK);
+  const loadDashboard = useCallback(() => adminApi.dashboard(), []);
+  const dashboard = useApiData(true, loadDashboard, ADMIN_DASHBOARD_FALLBACK);
   const responseRate = dashboard.counts.totalEgresados > 0
     ? Math.round((dashboard.counts.totalEncuestas / dashboard.counts.totalEgresados) * 100)
     : 0;
@@ -845,15 +858,15 @@ function AdminDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
     <div>
       <PageHeader title="Dashboard" subtitle="Resumen general — Universidad de Huánuco (UDH)" />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 14, marginBottom: 24 }}>
-        <StatCard icon={<GraduationCap size={21} />} label="Total Egresados" value={dashboard.counts.totalEgresados.toLocaleString()} sub="tabla egresado" color="#2563EB" />
-        <StatCard icon={<Building2 size={21} />} label="Total Empresas" value={dashboard.counts.totalEmpresas.toLocaleString()} sub="tabla empresa" color="#0EA5E9" />
+        <StatCard icon={<GraduationCap size={21} />} label="Total Egresados" value={dashboard.counts.totalEgresados.toLocaleString()} sub="Registrados en el sistema" color="#2563EB" />
+        <StatCard icon={<Building2 size={21} />} label="Total Empresas" value={dashboard.counts.totalEmpresas.toLocaleString()} sub="Empresas registradas" color="#0EA5E9" />
         <StatCard icon={<Briefcase size={21} />} label="Ofertas Laborales" value={dashboard.counts.totalOfertas.toLocaleString()} sub={`${dashboard.counts.ofertasActivas.toLocaleString()} activas`} color="#6366F1" />
-        <StatCard icon={<FileText size={21} />} label="Postulaciones" value={dashboard.counts.totalPostulaciones.toLocaleString()} sub="tabla postulacion" color="#10B981" />
+        <StatCard icon={<FileText size={21} />} label="Postulaciones" value={dashboard.counts.totalPostulaciones.toLocaleString()} sub="Solicitudes registradas" color="#10B981" />
         <StatCard icon={<ClipboardList size={21} />} label="Encuestas" value={dashboard.counts.totalEncuestas.toLocaleString()} sub={`${responseRate}% tasa de respuesta`} color="#F59E0B" />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 18 }}>
         <Card style={{ padding: 24 }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Egresados por Carrera (nombre_carrera)</div>
+          <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Egresados por Carrera</div>
           <ResponsiveContainer width="100%" height={210}>
             <BarChart data={dashboard.charts.egresadosPorCarrera} layout="vertical" margin={{ left: 4, right: 12 }}>
               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
@@ -865,7 +878,7 @@ function AdminDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
           </ResponsiveContainer>
         </Card>
         <Card style={{ padding: 24 }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Egresados por Facultad (nombre_facultad)</div>
+          <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Egresados por Facultad</div>
           <ResponsiveContainer width="100%" height={210}>
             <PieChart>
               <Pie data={dashboard.charts.egresadosPorFacultad} cx="50%" cy="50%" innerRadius={52} outerRadius={82} dataKey="value" paddingAngle={3}>
@@ -879,7 +892,7 @@ function AdminDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 24 }}>
         <Card style={{ padding: 24 }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Estado Laboral — estado_laboral (%)</div>
+          <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Estado Laboral (%)</div>
           <ResponsiveContainer width="100%" height={210}>
             <PieChart>
               <Pie data={dashboard.charts.estadoLaboral} cx="50%" cy="50%" outerRadius={82} dataKey="value" paddingAngle={3}>
@@ -1602,8 +1615,43 @@ function AdminEncuestas() {
 
 // ─── ADMIN: Reportes ──────────────────────────────────────────────────────────
 function Reportes() {
-  const dashboard = useApiData(true, adminApi.dashboard, ADMIN_DASHBOARD_FALLBACK);
+  const [facultadFiltro, setFacultadFiltro] = useState("Todas las facultades");
+  const [carreraFiltro, setCarreraFiltro] = useState("Todas las carreras");
+  const [anioFiltro, setAnioFiltro] = useState("Todos los años");
+  const [estadoLaboralFiltro, setEstadoLaboralFiltro] = useState("Todos los estados laborales");
+  const [appliedFilters, setAppliedFilters] = useState({
+    facultad: "",
+    carrera: "",
+    anio: "",
+    estadoLaboral: "",
+  });
+  const carrerasDisponibles = facultadFiltro === "Todas las facultades"
+    ? Object.values(CARRERAS).flat()
+    : CARRERAS[facultadFiltro] ?? [];
+  const loadReportes = useCallback(() => adminApi.dashboard(appliedFilters), [appliedFilters]);
+  const dashboard = useApiData(true, loadReportes, ADMIN_DASHBOARD_FALLBACK);
+  const noReportData = Object.values(dashboard.counts).every((value) => Number(value) === 0);
+  const carreraChartEmpty = isEmptySeries(dashboard.charts.egresadosPorCarrera as unknown as Record<string, unknown>[], ["egresados"]);
+  const facultadChartEmpty = isEmptySeries(dashboard.charts.egresadosPorFacultad as unknown as Record<string, unknown>[], ["value"]);
+  const laboralChartEmpty = isEmptySeries(dashboard.charts.estadoLaboral as unknown as Record<string, unknown>[], ["value"]);
+  const ofertasChartEmpty = isEmptySeries(dashboard.charts.ofertasHistorial as unknown as Record<string, unknown>[], ["activas", "cerradas"]);
+  const postulacionesChartEmpty = isEmptySeries(dashboard.charts.postulacionesEvolucion as unknown as Record<string, unknown>[], ["postulaciones"]);
   const sel: React.CSSProperties = { padding: "8px 12px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit", background: "#fff" };
+  const applyFilters = () => {
+    setAppliedFilters({
+      facultad: facultadFiltro === "Todas las facultades" ? "" : facultadFiltro,
+      carrera: carreraFiltro === "Todas las carreras" ? "" : carreraFiltro,
+      anio: anioFiltro === "Todos los años" ? "" : anioFiltro,
+      estadoLaboral: estadoLaboralFiltro === "Todos los estados laborales" ? "" : estadoLaboralFiltro,
+    });
+  };
+
+  useEffect(() => {
+    if (carreraFiltro !== "Todas las carreras" && !carrerasDisponibles.includes(carreraFiltro)) {
+      setCarreraFiltro("Todas las carreras");
+    }
+  }, [facultadFiltro, carreraFiltro, carrerasDisponibles]);
+
   return (
     <div>
       <PageHeader title="Reportes y Estadísticas" subtitle="Información consolidada — Universidad de Huánuco (UDH)"
@@ -1612,13 +1660,18 @@ function Reportes() {
       <Card style={{ padding: "16px 20px", marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>Filtrar por:</div>
-          <select style={sel}><option>Todas las facultades</option>{FACULTADES.map(f => <option key={f}>{f}</option>)}</select>
-          <select style={sel}><option>Todas las carreras</option>{Object.values(CARRERAS).flat().slice(0, 10).map(c => <option key={c}>{c}</option>)}</select>
-          <select style={sel}><option>Todos los años</option>{["2026", "2025", "2024", "2023", "2022", "2021"].map(y => <option key={y}>{y}</option>)}</select>
-          <select style={sel}><option>Todos los estados laborales</option>{["Empleado", "Independiente", "Desempleado", "Estudiando", "Emprendedor"].map(s => <option key={s}>{s}</option>)}</select>
-          <button style={{ padding: "8px 16px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>Aplicar</button>
+          <select value={facultadFiltro} onChange={e => setFacultadFiltro(e.target.value)} style={sel}><option>Todas las facultades</option>{FACULTADES.map(f => <option key={f}>{f}</option>)}</select>
+          <select value={carreraFiltro} onChange={e => setCarreraFiltro(e.target.value)} style={sel}><option>Todas las carreras</option>{carrerasDisponibles.map(c => <option key={c}>{c}</option>)}</select>
+          <select value={anioFiltro} onChange={e => setAnioFiltro(e.target.value)} style={sel}><option>Todos los años</option>{["2026", "2025", "2024", "2023", "2022", "2021"].map(y => <option key={y}>{y}</option>)}</select>
+          <select value={estadoLaboralFiltro} onChange={e => setEstadoLaboralFiltro(e.target.value)} style={sel}><option>Todos los estados laborales</option>{["Empleado", "Independiente", "Desempleado", "Estudiando", "Emprendedor"].map(s => <option key={s}>{s}</option>)}</select>
+          <button onClick={applyFilters} style={{ padding: "8px 16px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>Aplicar</button>
         </div>
       </Card>
+      {noReportData && (
+        <Card style={{ padding: "14px 18px", marginBottom: 20, color: "#64748B", fontSize: 13 }}>
+          No hay información disponible para la combinación de filtros seleccionada.
+        </Card>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 14, marginBottom: 24 }}>
         <StatCard icon={<GraduationCap size={21} />} label="Total Egresados" value={dashboard.counts.totalEgresados.toLocaleString()} color="#2563EB" />
         <StatCard icon={<Building2 size={21} />} label="Total Empresas" value={dashboard.counts.totalEmpresas.toLocaleString()} color="#0EA5E9" />
@@ -1629,67 +1682,77 @@ function Reportes() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 18 }}>
         <Card style={{ padding: 24 }}>
           <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Egresados por Carrera</div>
-          <ResponsiveContainer width="100%" height={210}>
-            <BarChart data={dashboard.charts.egresadosPorCarrera} layout="vertical" margin={{ left: 4, right: 12 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
-              <XAxis type="number" tick={{ fontSize: 11, fill: "#94A3B8" }} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "#64748B" }} width={100} />
-              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12 }} />
-              <Bar dataKey="egresados" name="Egresados" fill="#2563EB" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {carreraChartEmpty ? <ChartEmptyState /> : (
+            <ResponsiveContainer width="100%" height={210}>
+              <BarChart data={dashboard.charts.egresadosPorCarrera} layout="vertical" margin={{ left: 4, right: 12 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
+                <XAxis type="number" tick={{ fontSize: 11, fill: "#94A3B8" }} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "#64748B" }} width={100} />
+                <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12 }} />
+                <Bar dataKey="egresados" name="Egresados" fill="#2563EB" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </Card>
         <Card style={{ padding: 24 }}>
           <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Egresados por Facultad</div>
-          <ResponsiveContainer width="100%" height={210}>
-            <PieChart>
-              <Pie data={dashboard.charts.egresadosPorFacultad} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={3}>
-                {dashboard.charts.egresadosPorFacultad.map((e, i) => <Cell key={i} fill={e.color} />)}
-              </Pie>
-              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12 }} />
-              <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: 12 }} />
-            </PieChart>
-          </ResponsiveContainer>
+          {facultadChartEmpty ? <ChartEmptyState /> : (
+            <ResponsiveContainer width="100%" height={210}>
+              <PieChart>
+                <Pie data={dashboard.charts.egresadosPorFacultad} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={3}>
+                  {dashboard.charts.egresadosPorFacultad.map((e, i) => <Cell key={i} fill={e.color} />)}
+                </Pie>
+                <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12 }} />
+                <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: 12 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </Card>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 18 }}>
         <Card style={{ padding: 24 }}>
           <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Estado Laboral (%)</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie data={dashboard.charts.estadoLaboral} cx="50%" cy="50%" outerRadius={75} dataKey="value" paddingAngle={3}>
-                {dashboard.charts.estadoLaboral.map((e, i) => <Cell key={i} fill={e.color} />)}
-              </Pie>
-              <Tooltip formatter={(v: number) => `${v}%`} contentStyle={{ borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12 }} />
-              <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: 11 }} />
-            </PieChart>
-          </ResponsiveContainer>
+          {laboralChartEmpty ? <ChartEmptyState /> : (
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie data={dashboard.charts.estadoLaboral} cx="50%" cy="50%" outerRadius={75} dataKey="value" paddingAngle={3}>
+                  {dashboard.charts.estadoLaboral.map((e, i) => <Cell key={i} fill={e.color} />)}
+                </Pie>
+                <Tooltip formatter={(v: number) => `${v}%`} contentStyle={{ borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12 }} />
+                <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: 11 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </Card>
         <Card style={{ padding: 24 }}>
           <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Ofertas: Activa vs Cerrada</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={dashboard.charts.ofertasHistorial}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-              <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "#94A3B8" }} />
-              <YAxis tick={{ fontSize: 11, fill: "#94A3B8" }} />
-              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12 }} />
-              <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="activas" name="Activa" fill="#2563EB" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="cerradas" name="Cerrada" fill="#CBD5E1" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {ofertasChartEmpty ? <ChartEmptyState /> : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={dashboard.charts.ofertasHistorial}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "#94A3B8" }} />
+                <YAxis tick={{ fontSize: 11, fill: "#94A3B8" }} />
+                <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12 }} />
+                <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="activas" name="Activa" fill="#2563EB" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="cerradas" name="Cerrada" fill="#CBD5E1" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </Card>
         <Card style={{ padding: 24 }}>
           <div style={{ fontWeight: 600, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Evolución Postulaciones</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={dashboard.charts.postulacionesEvolucion}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-              <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "#94A3B8" }} />
-              <YAxis tick={{ fontSize: 11, fill: "#94A3B8" }} />
-              <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12 }} />
-              <Line type="monotone" dataKey="postulaciones" stroke="#6366F1" strokeWidth={2.5} dot={{ fill: "#6366F1", r: 4 }} />
-            </LineChart>
-          </ResponsiveContainer>
+          {postulacionesChartEmpty ? <ChartEmptyState /> : (
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={dashboard.charts.postulacionesEvolucion}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "#94A3B8" }} />
+                <YAxis tick={{ fontSize: 11, fill: "#94A3B8" }} />
+                <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12 }} />
+                <Line type="monotone" dataKey="postulaciones" stroke="#6366F1" strokeWidth={2.5} dot={{ fill: "#6366F1", r: 4 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </Card>
       </div>
     </div>

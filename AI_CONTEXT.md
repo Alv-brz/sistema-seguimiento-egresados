@@ -121,7 +121,7 @@ El backend es una API REST modular bajo `/api`:
 - `GET /api/health`: valida que el pool pueda ejecutar `SELECT 1 AS ok`.
 - `POST /api/auth/login`: valida usuario/password contra MySQL.
 - `GET /api/auth/me`: valida JWT Bearer y reconstruye la sesion desde MySQL.
-- `GET /api/admin/dashboard`: resumen y graficos del administrador desde MySQL.
+- `GET /api/admin/dashboard`: resumen y graficos del administrador desde MySQL. Acepta filtros opcionales `facultad`, `carrera`, `anio` y `estadoLaboral` para Reportes y Estadisticas.
 - `GET /api/admin/configuracion`: lee `configuracion_sistema` con `id_configuracion = 1`.
 - `PUT /api/admin/configuracion`: actualiza parametros globales de `configuracion_sistema`.
 - `GET /api/egresados`: listado de lectura para gestion admin de egresados.
@@ -212,6 +212,8 @@ La capa frontend reutilizable esta en `src/app/api.ts`:
 - Los listados empresa con busqueda real son mis ofertas y postulaciones recibidas.
 - Los listados egresado con busqueda real son bolsa laboral, mis postulaciones e historial laboral.
 - Filtros utiles actuales: egresados por carrera/estado de usuario; empresas por sector/estado de usuario; ofertas por estado/modalidad; postulaciones por estado; encuestas por estado laboral; auditoria por accion/tabla afectada; notificaciones por todas/leidas/no leidas; historial laboral por actual/no actual.
+- La pantalla Dashboard de administrador consume `/api/admin/dashboard` sin filtros y no debe usar textos tecnicos visibles en KPIs o titulos de graficos.
+- La pantalla Reportes y Estadisticas consume `/api/admin/dashboard` con filtros aplicados por boton: facultad, carrera, anio y estado laboral. Los KPIs y graficos deben actualizarse con la respuesta filtrada y mostrar estado vacio si no hay datos.
 
 ## Modelo de Autenticacion
 

@@ -28,6 +28,7 @@ Estado aprobado al 2026-06-26:
 - CRUD Administrador Fase A implementado para configuracion del sistema, egresados, empresas y ofertas.
 - Ajuste de coherencia previo a CRUD Administrador Fase B implementado: encuestas sin eliminacion, cuentas admin desactivables/reactivables y ofertas no eliminables si tienen postulaciones.
 - Mejora general de usabilidad implementada: buscadores server-side en listados grandes, filtros visibles reducidos a los utiles y limpieza de etiquetas tecnicas SQL en formularios/vistas principales.
+- Dashboard y Reportes corregidos: KPIs/graficos usan backend real, Reportes envia filtros al backend y actualiza datos filtrados.
 
 ## Fases Implementadas
 
@@ -570,6 +571,41 @@ Verificacion realizada:
 - Prueba HTTP real con JWT egresado: busqueda/filtros en bolsa laboral, mis postulaciones e historial laboral.
 - Revision de interfaz en `src/app/App.tsx`: formularios principales y vistas solicitadas usan etiquetas amigables; las coincidencias tecnicas restantes son nombres internos de propiedades, datos mock o comentarios de desarrollo, no textos de ayuda visibles.
 
+### Fase 14 - Correccion de Dashboard y Reportes
+
+Estado: implementada en esta sesion.
+
+Incluye:
+
+- Dashboard de administrador confirmado contra datos reales de `/api/admin/dashboard`.
+- KPIs del Dashboard sin etiquetas tecnicas visibles como `tabla egresado`, `tabla empresa`, `nombre_carrera`, `nombre_facultad` o `estado_laboral`.
+- `GET /api/admin/dashboard` acepta filtros opcionales `facultad`, `carrera`, `anio` y `estadoLaboral`.
+- Reportes y Estadisticas envia filtros al backend solo al presionar `Aplicar`.
+- KPIs y graficos de Reportes se recalculan con la respuesta filtrada del backend.
+- Filtros por facultad/carrera limitan las series de egresados, encuestas y postulaciones segun el egresado asociado.
+- Ofertas y empresas se filtran por postulaciones de egresados asociados cuando se aplican filtros academicos; sin filtros se mantiene el resumen global.
+- Estado vacio visible cuando una combinacion de filtros no tiene informacion.
+- No se modifico `Database/`, diseno visual ni estructura general de paginas.
+
+Archivos modificados:
+
+- `backend/src/modules/admin-dashboard/admin-dashboard.controller.ts`
+- `backend/src/modules/admin-dashboard/admin-dashboard.service.ts`
+- `src/app/api.ts`
+- `src/app/App.tsx`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+Verificacion realizada:
+
+- `npm.cmd run build` en `backend/`: correcto.
+- `npm.cmd run build` en frontend: correcto tras ejecutar fuera del sandbox por restriccion de acceso en la ruta de OneDrive; Vite solo reporto advertencia de chunk grande.
+- Prueba HTTP real con JWT admin: `/api/admin/dashboard` global responde KPIs y series.
+- Prueba HTTP real con JWT admin: filtro por `Facultad de Ingeniería` cambia KPIs y deja una sola facultad en el grafico correspondiente.
+- Prueba HTTP real con JWT admin: filtro por `Ingeniería de Sistemas` devuelve solo esa carrera y `Facultad de Ingeniería`.
+- Prueba HTTP real con JWT admin: combinacion `facultad + carrera + anio + estadoLaboral` cambia KPIs y graficos.
+- Prueba HTTP real con JWT admin: combinacion sin registros devuelve KPIs en cero y series vacias para estado vacio.
+
 ## Funcionalidades Terminadas
 
 - Aplicacion frontend arranca con Vite.
@@ -629,11 +665,13 @@ Verificacion realizada:
 - Buscadores server-side en listados grandes de administrador, empresa y egresado.
 - Filtros visibles reducidos a los necesarios por modulo.
 - Etiquetas y ayudas visibles limpiadas para evitar tipos SQL y nombres tecnicos en la interfaz.
+- Dashboard de administrador con etiquetas amigables y datos reales desde backend.
+- Reportes y Estadisticas con filtros reales enviados al backend y KPIs/graficos filtrados.
 
 ## Funcionalidades Pendientes
 
 - Consumir `GET /api/auth/me` al iniciar para validar sesion contra backend.
-- Endpoints backend para reportes.
+- Exportacion real de reportes a PDF/Excel.
 - Validacion de entrada por modulo.
 - Proteccion de permisos por propietario del recurso para modulos pendientes fuera de Empresa y Egresado.
 - Manejo formal de variables `.env` y documentacion de ejemplo si falta.
@@ -641,7 +679,7 @@ Verificacion realizada:
 
 ## Fases Pendientes Recomendadas
 
-### Fase 14 - Validacion de Sesion
+### Fase 15 - Validacion de Sesion
 
 Objetivo:
 
@@ -655,7 +693,7 @@ Archivos probables:
 - `src/app/api.ts`
 - `src/app/App.tsx`
 
-### Fase 15 - CRUD Administrador Fase B
+### Fase 16 - CRUD Administrador Fase B
 
 Objetivo:
 
@@ -663,7 +701,7 @@ Objetivo:
 - Usar procedimientos almacenados existentes si calzan.
 - Respetar triggers y errores `SIGNAL`.
 
-### Fase 16 - Modularizacion Frontend
+### Fase 17 - Modularizacion Frontend
 
 Objetivo:
 
@@ -689,9 +727,11 @@ Estado:
 - CRUD Administrador Fase A queda implementado.
 - Ajuste de coherencia de acciones queda implementado y espera aprobacion del usuario antes de iniciar CRUD Administrador Fase B.
 - Mejora de usabilidad de buscadores, filtros y etiquetas queda implementada y espera aprobacion del usuario antes de iniciar CRUD Administrador Fase B.
+- Dashboard y Reportes quedan corregidos con filtros reales desde backend.
 - Refresco de pagina restaura la ultima pantalla valida del rol autenticado.
 - Sistema global de mensajes y confirmaciones activo en toda la aplicacion; no quedan ventanas nativas del navegador.
 - Listados admin, empresa y egresado principales tienen paginacion, busqueda y filtros reales donde corresponde.
+- Reportes y Estadisticas actualiza KPIs y graficos al aplicar filtros.
 - Acciones de escritura/exportacion no implementadas fuera de Empresa, Egresado y Administrador Fase A muestran aviso de fase CRUD.
 - Base de datos intacta.
 - Proxima fase recomendada: esperar aprobacion; luego validacion de sesion o CRUD Administrador Fase B si el usuario lo autoriza.

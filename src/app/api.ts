@@ -26,6 +26,7 @@ type ListParams = {
   search?: string;
   facultad?: string;
   carrera?: string;
+  anio?: string;
   sexo?: string;
   sector?: string;
   estado?: string;
@@ -317,7 +318,7 @@ export async function apiSend<T>(
 }
 
 export const adminApi = {
-  dashboard: () => apiGet<AdminDashboardData>("/admin/dashboard"),
+  dashboard: (params?: Pick<ListParams, "facultad" | "carrera" | "anio" | "estadoLaboral">) => apiGet<AdminDashboardData>("/admin/dashboard", params),
   egresados: (params?: ListParams) => apiGet<PaginatedResponse<AdminEgresado>>("/egresados", params),
   crearEgresado: (body: Record<string, unknown>) => apiSend<{ id_usuario: number }>("POST", "/egresados", body),
   actualizarEgresado: (id: number, body: Record<string, unknown>) => apiSend<void>("PUT", `/egresados/${id}`, body),
