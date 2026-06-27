@@ -25,7 +25,8 @@ Estado aprobado al 2026-06-26:
 - Sistema global de mensajes y confirmaciones implementado en toda la aplicacion; ya no se usan `alert()`, `confirm()` ni `prompt()` nativos.
 - CRUD Egresado cerrado para postular a ofertas, editar perfil propio, CRUD de historial laboral, registrar encuesta y marcar notificaciones como leidas.
 - Restauracion de ultima pantalla valida por rol al refrescar la pagina con sesion activa.
-- CRUD Administrador Fase A implementado para configuracion del sistema, egresados, empresas, ofertas y eliminacion controlada de encuestas.
+- CRUD Administrador Fase A implementado para configuracion del sistema, egresados, empresas y ofertas.
+- Ajuste de coherencia previo a CRUD Administrador Fase B implementado: encuestas sin eliminacion, cuentas admin desactivables/reactivables y ofertas no eliminables si tienen postulaciones.
 
 ## Fases Implementadas
 
@@ -466,6 +467,62 @@ Verificacion realizada:
 - Prueba HTTP real: auditoria registra cambios de `configuracion_sistema`.
 - `rg` confirmo que no quedan referencias fijas a `INTERVAL 6`, `6 MONTH`, `cada 6` ni `defaultValue={6}` en `backend/` o `src/`.
 
+### Fase 12 - Ajuste de Coherencia de Acciones
+
+Estado: implementada en esta sesion, pendiente de aprobacion del usuario antes de iniciar CRUD Administrador Fase B.
+
+Incluye:
+
+- Gestion de Encuestas ya no muestra boton Eliminar; mantiene solo Ver detalle.
+- Gestion de Encuestas muestra ayuda discreta: `Las encuestas respondidas forman parte del historial del egresado y no se eliminan.`
+- Backend de encuestas ya no expone `DELETE /api/encuestas/:id`.
+- Gestion de Egresados mantiene eliminacion condicionada por integridad referencial y agrega Desactivar/Reactivar cuenta.
+- Desactivar/Reactivar egresado actualiza `usuario.estado_usuario` mediante `PATCH /api/egresados/:id/estado`.
+- Gestion de Empresas mantiene eliminacion condicionada por integridad referencial y agrega Desactivar/Reactivar cuenta.
+- Desactivar/Reactivar empresa actualiza `usuario.estado_usuario` mediante `PATCH /api/empresas/:id/estado`.
+- Gestion de Ofertas bloquea explicitamente la eliminacion si existen postulaciones asociadas, antes de intentar el `DELETE`.
+- El bloqueo de oferta con postulaciones devuelve: `No se puede eliminar una oferta con postulaciones asociadas. Puede cerrarla.`
+- Mensajes genericos de integridad referencial se reemplazaron por un mensaje claro que sugiere desactivar cuando corresponde.
+- Se mantuvieron JWT, roles, toasts, confirmaciones internas, auditoria/triggers y validaciones `SIGNAL`.
+- No se modifico `Database/`, estilos globales ni diseno general.
+
+Endpoints backend agregados o ajustados:
+
+- `PATCH /api/egresados/:id/estado`
+- `PATCH /api/empresas/:id/estado`
+- `DELETE /api/ofertas/:id` ahora valida conteo de postulaciones antes de eliminar.
+- `DELETE /api/encuestas/:id` removido.
+
+Archivos modificados:
+
+- `backend/src/middleware/errorHandler.ts`
+- `backend/src/modules/egresados/egresados.routes.ts`
+- `backend/src/modules/egresados/egresados.controller.ts`
+- `backend/src/modules/egresados/egresados.service.ts`
+- `backend/src/modules/empresas/empresas.routes.ts`
+- `backend/src/modules/empresas/empresas.controller.ts`
+- `backend/src/modules/empresas/empresas.service.ts`
+- `backend/src/modules/ofertas/ofertas.controller.ts`
+- `backend/src/modules/ofertas/ofertas.service.ts`
+- `backend/src/modules/encuestas/encuestas.routes.ts`
+- `backend/src/modules/encuestas/encuestas.controller.ts`
+- `backend/src/modules/encuestas/encuestas.service.ts`
+- `src/app/api.ts`
+- `src/app/App.tsx`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+Verificacion realizada:
+
+- `npm.cmd run build` en `backend/`: correcto.
+- `npm.cmd run build` en frontend: correcto tras ejecutar fuera del sandbox por restriccion de acceso en la ruta de OneDrive; Vite solo reporto advertencia de chunk grande.
+- `rg` confirmo que no quedan referencias a `eliminarEncuesta`, `deleteEncuesta`, `Eliminar encuesta`, `DELETE` de encuestas ni ventanas nativas `alert()`, `confirm()` o `prompt()`.
+- Prueba HTTP real: `DELETE /api/encuestas/1` ya no existe y responde 404.
+- Prueba HTTP real: egresado admin alterna `Activo/Inactivo` y se restaura al estado original.
+- Prueba HTTP real: empresa admin alterna `Activo/Inactivo` y se restaura al estado original.
+- Prueba HTTP real: oferta con 44 postulaciones asociadas responde 409 con el mensaje requerido.
+- Prueba HTTP real: oferta temporal sin postulaciones se crea y elimina correctamente.
+
 ## Funcionalidades Terminadas
 
 - Aplicacion frontend arranca con Vite.
@@ -518,7 +575,10 @@ Verificacion realizada:
 - Marcar una o todas las notificaciones como leidas para el usuario autenticado.
 - Restaurar la ultima pantalla valida del rol al refrescar la pagina con sesion activa.
 - Configuracion real del sistema desde `configuracion_sistema`.
-- CRUD Administrador Fase A para egresados, empresas, ofertas y eliminacion controlada de encuestas.
+- CRUD Administrador Fase A para egresados, empresas y ofertas.
+- Gestion de encuestas de administrador como historico solo lectura/detalle, sin eliminacion.
+- Desactivar/reactivar cuentas de egresados y empresas desde administrador.
+- Bloqueo explicito de eliminacion de ofertas con postulaciones asociadas desde administrador.
 
 ## Funcionalidades Pendientes
 
@@ -531,7 +591,7 @@ Verificacion realizada:
 
 ## Fases Pendientes Recomendadas
 
-### Fase 12 - Validacion de Sesion
+### Fase 13 - Validacion de Sesion
 
 Objetivo:
 
@@ -545,7 +605,7 @@ Archivos probables:
 - `src/app/api.ts`
 - `src/app/App.tsx`
 
-### Fase 13 - CRUD Administrador Fase B
+### Fase 14 - CRUD Administrador Fase B
 
 Objetivo:
 
@@ -553,7 +613,7 @@ Objetivo:
 - Usar procedimientos almacenados existentes si calzan.
 - Respetar triggers y errores `SIGNAL`.
 
-### Fase 14 - Modularizacion Frontend
+### Fase 15 - Modularizacion Frontend
 
 Objetivo:
 
@@ -576,7 +636,8 @@ Estado:
 - Frontend egresado ejecuta escrituras reales aprobadas para postulaciones, perfil, historial, encuesta y notificaciones.
 - CRUD Empresa queda cerrado funcionalmente.
 - CRUD Egresado queda cerrado funcionalmente y espera aprobacion del usuario antes de iniciar CRUD Administrador.
-- CRUD Administrador Fase A queda implementado y espera aprobacion del usuario antes de iniciar Fase B.
+- CRUD Administrador Fase A queda implementado.
+- Ajuste de coherencia de acciones queda implementado y espera aprobacion del usuario antes de iniciar CRUD Administrador Fase B.
 - Refresco de pagina restaura la ultima pantalla valida del rol autenticado.
 - Sistema global de mensajes y confirmaciones activo en toda la aplicacion; no quedan ventanas nativas del navegador.
 - Listados admin tienen paginacion/filtros reales.

@@ -944,7 +944,7 @@ function AdminEgresados() {
   async function handleDelete(item: AdminEgresado) {
     const confirmed = await requestConfirmation({
       title: "Eliminar egresado",
-      message: `¿Deseas eliminar a ${item.nombre_egresado} ${item.apellidos_egresado}? Solo se eliminará si la base de datos no tiene registros relacionados.`,
+      message: `¿Deseas eliminar a ${item.nombre_egresado} ${item.apellidos_egresado}? Si el registro forma parte del historial del sistema, la base de datos bloqueará la operación. Puede desactivarlo.`,
       confirmLabel: "Eliminar",
       variant: "danger",
     });
@@ -953,6 +953,26 @@ function AdminEgresados() {
     try {
       await adminApi.eliminarEgresado(item.id_usuario);
       toast("success", "Egresado eliminado correctamente.");
+      setRefreshKey(k => k + 1);
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    }
+  }
+
+  async function handleToggleEstado(item: AdminEgresado) {
+    const nextEstado = item.estado_usuario === "Inactivo" ? "Activo" : "Inactivo";
+    const confirmed = await requestConfirmation({
+      title: nextEstado === "Activo" ? "Reactivar cuenta" : "Desactivar cuenta",
+      message: `¿Deseas ${nextEstado === "Activo" ? "reactivar" : "desactivar"} la cuenta de ${item.nombre_egresado} ${item.apellidos_egresado}?`,
+      confirmLabel: nextEstado === "Activo" ? "Reactivar" : "Desactivar",
+      variant: nextEstado === "Activo" ? "primary" : "danger",
+    });
+    if (!confirmed) return;
+
+    try {
+      await adminApi.cambiarEstadoEgresado(item.id_usuario, nextEstado);
+      toast("success", nextEstado === "Activo" ? "Cuenta reactivada correctamente." : "Cuenta desactivada correctamente.");
+      setSelected(null);
       setRefreshKey(k => k + 1);
     } catch (error) {
       toast("error", getErrorMessage(error));
@@ -1052,6 +1072,7 @@ function AdminEgresados() {
                     <div style={{ display: "flex", gap: 2 }}>
                       <Btn variant="outline" small onClick={() => setSelected(e)}><Eye size={14} /></Btn>
                       <Btn variant="ghost" small onClick={() => setEditing(e)}><Edit2 size={14} /></Btn>
+                      <Btn variant="outline" small onClick={() => handleToggleEstado(e)}>{e.estado_usuario === "Inactivo" ? "Reactivar" : "Desactivar"}</Btn>
                       <Btn variant="danger" small onClick={() => handleDelete(e)}><Trash2 size={14} /></Btn>
                     </div>
                   </TD>
@@ -1118,7 +1139,7 @@ function AdminEmpresas() {
   async function handleDelete(item: AdminEmpresa) {
     const confirmed = await requestConfirmation({
       title: "Eliminar empresa",
-      message: `¿Deseas eliminar "${item.razon_social}"? Solo se eliminará si no tiene ofertas u otros registros relacionados.`,
+      message: `¿Deseas eliminar "${item.razon_social}"? Si el registro forma parte del historial del sistema, la base de datos bloqueará la operación. Puede desactivarla.`,
       confirmLabel: "Eliminar",
       variant: "danger",
     });
@@ -1127,6 +1148,26 @@ function AdminEmpresas() {
     try {
       await adminApi.eliminarEmpresa(item.id_usuario);
       toast("success", "Empresa eliminada correctamente.");
+      setRefreshKey(k => k + 1);
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    }
+  }
+
+  async function handleToggleEstado(item: AdminEmpresa) {
+    const nextEstado = item.estado_usuario === "Inactivo" ? "Activo" : "Inactivo";
+    const confirmed = await requestConfirmation({
+      title: nextEstado === "Activo" ? "Reactivar cuenta" : "Desactivar cuenta",
+      message: `¿Deseas ${nextEstado === "Activo" ? "reactivar" : "desactivar"} la cuenta de "${item.razon_social}"?`,
+      confirmLabel: nextEstado === "Activo" ? "Reactivar" : "Desactivar",
+      variant: nextEstado === "Activo" ? "primary" : "danger",
+    });
+    if (!confirmed) return;
+
+    try {
+      await adminApi.cambiarEstadoEmpresa(item.id_usuario, nextEstado);
+      toast("success", nextEstado === "Activo" ? "Cuenta reactivada correctamente." : "Cuenta desactivada correctamente.");
+      setSelected(null);
       setRefreshKey(k => k + 1);
     } catch (error) {
       toast("error", getErrorMessage(error));
@@ -1203,6 +1244,7 @@ function AdminEmpresas() {
                   <div style={{ display: "flex", gap: 2 }}>
                     <Btn variant="outline" small onClick={() => setSelected(e)}><Eye size={14} /></Btn>
                     <Btn variant="ghost" small onClick={() => setEditing(e)}><Edit2 size={14} /></Btn>
+                    <Btn variant="outline" small onClick={() => handleToggleEstado(e)}>{e.estado_usuario === "Inactivo" ? "Reactivar" : "Desactivar"}</Btn>
                     <Btn variant="danger" small onClick={() => handleDelete(e)}><Trash2 size={14} /></Btn>
                   </div>
                 </TD>
@@ -1432,43 +1474,22 @@ function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScree
 
 // ─── ADMIN: Encuestas ─────────────────────────────────────────────────────────
 function AdminEncuestas() {
-  const { toast, requestConfirmation } = useFeedback();
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AdminEncuesta | null>(null);
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
-  const [refreshKey, setRefreshKey] = useState(0);
   const localEncuestas = (ENCUESTAS as AdminEncuesta[]).filter(e => estadoFiltro === "Todos" || e.estado_laboral === estadoFiltro);
   const fallback = paginatedFallback(localEncuestas, page);
   const encuestasPage = usePaginatedApiData(
     true,
     () => adminApi.encuestas({ page, pageSize: DEFAULT_PAGE_SIZE, estadoLaboral: estadoFiltro }),
     fallback,
-    [page, estadoFiltro, refreshKey]
+    [page, estadoFiltro]
   );
   const filtered = encuestasPage.items;
 
   useEffect(() => {
     setPage(1);
   }, [estadoFiltro]);
-
-  async function handleDelete(item: AdminEncuesta) {
-    const confirmed = await requestConfirmation({
-      title: "Eliminar encuesta",
-      message: `¿Deseas eliminar la encuesta ${item.id_encuesta}? Solo se eliminará si las restricciones de la base de datos lo permiten.`,
-      confirmLabel: "Eliminar",
-      variant: "danger",
-    });
-    if (!confirmed) return;
-
-    try {
-      await adminApi.eliminarEncuesta(item.id_encuesta);
-      toast("success", "Encuesta eliminada correctamente.");
-      setSelected(null);
-      setRefreshKey(k => k + 1);
-    } catch (error) {
-      toast("error", getErrorMessage(error));
-    }
-  }
 
   return (
     <div>
@@ -1495,11 +1516,14 @@ function AdminEncuestas() {
       )}
       <PageHeader title="Gestión de Encuestas" subtitle="Tablas: encuesta_seguimiento + seguimiento_egresado" action={<Btn variant="outline" onClick={unavailableCrudAction}><BarChart2 size={14} /> Generar Reporte</Btn>} />
       <Card>
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
           <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
             <option>Todos</option>
             {["Empleado", "Independiente", "Desempleado", "Estudiando", "Emprendedor"].map(s => <option key={s}>{s}</option>)}
           </select>
+          <div style={{ fontSize: 12, color: "#64748B", textAlign: "right" }}>
+            Las encuestas respondidas forman parte del historial del egresado y no se eliminan.
+          </div>
         </div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead><tr><TH label="Egresado" /><TH label="estado_laboral" /><TH label="nombre_empresa_actual" /><TH label="cargo_actual" /><TH label="sueldo_mensual" /><TH label="tipo_contrato" /><TH label="fecha_registro" /><TH label="Acciones" /></tr></thead>
@@ -1516,7 +1540,6 @@ function AdminEncuestas() {
                 <TD>
                   <div style={{ display: "flex", gap: 2 }}>
                     <Btn variant="outline" small onClick={() => setSelected(e)}><Eye size={14} /></Btn>
-                    <Btn variant="danger" small onClick={() => handleDelete(e)}><Trash2 size={14} /></Btn>
                   </div>
                 </TD>
               </tr>

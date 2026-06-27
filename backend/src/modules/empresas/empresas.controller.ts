@@ -6,6 +6,7 @@ import {
   deleteEmpresa,
   listEmpresas,
   updateEmpresa,
+  updateEmpresaEstado,
   type AdminEmpresaInput,
 } from "./empresas.service.js";
 import { getExactFilter, getPagination, getStringFilter } from "../../utils/pagination.js";
@@ -112,6 +113,27 @@ export const empresasController = {
     }
 
     const result = (await deleteEmpresa(id)) as ResultSetHeader;
+    if (result.affectedRows === 0) {
+      res.status(404).json({ ok: false, error: "Empresa no encontrada." });
+      return;
+    }
+
+    res.json({ ok: true });
+  }),
+
+  updateEstado: asyncHandler(async (req: Request, res: Response) => {
+    const id = parsePositiveId(req.params.id);
+    const estado = normalizeRequiredString((req.body as { estado_usuario?: unknown }).estado_usuario);
+    if (!id) {
+      badRequest(res, "id de empresa inválido.");
+      return;
+    }
+    if (estado !== "Activo" && estado !== "Inactivo") {
+      badRequest(res, "estado_usuario debe ser Activo o Inactivo.");
+      return;
+    }
+
+    const result = (await updateEmpresaEstado(id, estado)) as ResultSetHeader;
     if (result.affectedRows === 0) {
       res.status(404).json({ ok: false, error: "Empresa no encontrada." });
       return;

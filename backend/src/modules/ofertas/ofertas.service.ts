@@ -125,10 +125,19 @@ export async function updateOfertaEstado(idOferta: number, estado: "Activa" | "C
 }
 
 export async function deleteOferta(idOferta: number) {
+  const [postulacionesRows] = await pool.execute(
+    "SELECT COUNT(*) AS total FROM postulacion WHERE id_oferta = ?",
+    [idOferta]
+  );
+  const totalPostulaciones = Number((postulacionesRows as { total: number }[])[0]?.total ?? 0);
+  if (totalPostulaciones > 0) {
+    return { blockedByPostulaciones: true as const };
+  }
+
   const [result] = await pool.execute(
     "DELETE FROM oferta_laboral WHERE id_oferta = ?",
     [idOferta]
   );
 
-  return result;
+  return { blockedByPostulaciones: false as const, result };
 }

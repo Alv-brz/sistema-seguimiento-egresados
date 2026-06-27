@@ -211,3 +211,12 @@ export async function deleteEmpresa(idUsuario: number) {
     connection.release();
   }
 }
+
+export async function updateEmpresaEstado(idUsuario: number, estadoUsuario: "Activo" | "Inactivo") {
+  const [result] = await pool.execute(
+    "UPDATE usuario SET estado_usuario = ? WHERE id_usuario = ? AND EXISTS (SELECT 1 FROM empresa em WHERE em.id_usuario = usuario.id_usuario)",
+    [estadoUsuario, idUsuario]
+  );
+
+  return result;
+}

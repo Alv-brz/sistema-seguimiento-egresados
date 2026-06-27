@@ -6,6 +6,7 @@ import {
   deleteEgresado,
   listEgresados,
   updateEgresado,
+  updateEgresadoEstado,
   type AdminEgresadoInput,
 } from "./egresados.service.js";
 import { getExactFilter, getPagination, getStringFilter } from "../../utils/pagination.js";
@@ -131,6 +132,27 @@ export const egresadosController = {
     }
 
     const result = (await deleteEgresado(id)) as ResultSetHeader;
+    if (result.affectedRows === 0) {
+      res.status(404).json({ ok: false, error: "Egresado no encontrado." });
+      return;
+    }
+
+    res.json({ ok: true });
+  }),
+
+  updateEstado: asyncHandler(async (req: Request, res: Response) => {
+    const id = parsePositiveId(req.params.id);
+    const estado = normalizeRequiredString((req.body as { estado_usuario?: unknown }).estado_usuario);
+    if (!id) {
+      badRequest(res, "id de egresado inválido.");
+      return;
+    }
+    if (estado !== "Activo" && estado !== "Inactivo") {
+      badRequest(res, "estado_usuario debe ser Activo o Inactivo.");
+      return;
+    }
+
+    const result = (await updateEgresadoEstado(id, estado)) as ResultSetHeader;
     if (result.affectedRows === 0) {
       res.status(404).json({ ok: false, error: "Egresado no encontrado." });
       return;

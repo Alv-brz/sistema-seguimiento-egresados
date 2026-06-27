@@ -234,3 +234,12 @@ export async function deleteEgresado(idUsuario: number) {
     connection.release();
   }
 }
+
+export async function updateEgresadoEstado(idUsuario: number, estadoUsuario: "Activo" | "Inactivo") {
+  const [result] = await pool.execute(
+    "UPDATE usuario SET estado_usuario = ? WHERE id_usuario = ? AND EXISTS (SELECT 1 FROM egresado e WHERE e.id_usuario = usuario.id_usuario)",
+    [estadoUsuario, idUsuario]
+  );
+
+  return result;
+}

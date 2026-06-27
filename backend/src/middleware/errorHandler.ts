@@ -39,7 +39,7 @@ export function errorHandler(
     if (e.code === "ER_ROW_IS_REFERENCED_2" || e.code === "ER_NO_REFERENCED_ROW_2") {
       return res.status(409).json({
         ok: false,
-        error: "La operación no se puede completar porque existen registros relacionados.",
+        error: "No se puede eliminar porque el registro forma parte del historial del sistema. Puede desactivarlo.",
       });
     }
   }

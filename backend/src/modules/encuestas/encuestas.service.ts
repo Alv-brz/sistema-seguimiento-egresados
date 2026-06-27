@@ -59,12 +59,3 @@ export async function listEncuestas(
     pageSize: pagination.pageSize,
   };
 }
-
-export async function deleteEncuesta(idEncuesta: number) {
-  const [result] = await pool.execute(
-    "DELETE FROM encuesta_seguimiento WHERE id_encuesta = ?",
-    [idEncuesta]
-  );
-
-  return result;
-}

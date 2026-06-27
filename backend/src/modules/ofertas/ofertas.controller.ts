@@ -120,7 +120,16 @@ export const ofertasController = {
       return;
     }
 
-    const result = (await deleteOferta(id)) as ResultSetHeader;
+    const deleteResult = await deleteOferta(id);
+    if (deleteResult.blockedByPostulaciones) {
+      res.status(409).json({
+        ok: false,
+        error: "No se puede eliminar una oferta con postulaciones asociadas. Puede cerrarla.",
+      });
+      return;
+    }
+
+    const result = deleteResult.result as ResultSetHeader;
     if (result.affectedRows === 0) {
       res.status(404).json({ ok: false, error: "Oferta no encontrada." });
       return;
