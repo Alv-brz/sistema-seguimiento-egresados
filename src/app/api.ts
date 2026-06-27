@@ -230,7 +230,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiGet<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
+function buildHeaders() {
   const session = readStoredSession();
   const headers: HeadersInit = { "Content-Type": "application/json" };
 
@@ -238,6 +238,11 @@ export async function apiGet<T>(path: string, params?: Record<string, string | n
     headers.Authorization = `Bearer ${session.token}`;
   }
 
+  return headers;
+}
+
+export async function apiGet<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
+  const headers = buildHeaders();
   const query = new URLSearchParams();
 
   Object.entries(params ?? {}).forEach(([key, value]) => {
@@ -261,6 +266,29 @@ export async function apiGet<T>(path: string, params?: Record<string, string | n
   return payload.data;
 }
 
+export async function apiSend<T>(
+  method: "POST" | "PUT" | "PATCH",
+  path: string,
+  body?: unknown
+): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers: buildHeaders(),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const payload = (await response.json()) as ApiSuccess<T> | ApiFailure;
+
+  if (!response.ok || payload.ok !== true) {
+    throw new ApiError(
+      response.status,
+      payload.error ?? payload.reason ?? "Error al consumir la API.",
+      payload.reason
+    );
+  }
+
+  return "data" in payload ? payload.data : (undefined as T);
+}
+
 export const adminApi = {
   dashboard: () => apiGet<AdminDashboardData>("/admin/dashboard"),
   egresados: (params?: ListParams) => apiGet<PaginatedResponse<AdminEgresado>>("/egresados", params),
@@ -274,8 +302,13 @@ export const adminApi = {
 export const empresaApi = {
   dashboard: () => apiGet<EmpresaDashboardData>("/empresa/dashboard"),
   ofertas: (params?: ListParams) => apiGet<PaginatedResponse<AdminOferta>>("/empresa/ofertas", params),
+  crearOferta: (body: Partial<AdminOferta>) => apiSend<void>("POST", "/empresa/ofertas", body),
+  actualizarOferta: (id: number, body: Partial<AdminOferta>) => apiSend<void>("PUT", `/empresa/ofertas/${id}`, body),
+  cerrarOferta: (id: number) => apiSend<void>("PATCH", `/empresa/ofertas/${id}/cerrar`),
   postulaciones: (params?: ListParams) => apiGet<PaginatedResponse<EmpresaPostulacion>>("/empresa/postulaciones", params),
+  cambiarEstadoPostulacion: (id: number, estado: "Pendiente" | "Aceptado" | "Rechazado") => apiSend<void>("PATCH", `/empresa/postulaciones/${id}/estado`, { estado }),
   perfil: () => apiGet<AdminEmpresa | null>("/empresa/perfil"),
+  actualizarPerfil: (body: Partial<AdminEmpresa>) => apiSend<void>("PUT", "/empresa/perfil", body),
   notificaciones: (params?: ListParams) => apiGet<PaginatedResponse<ApiNotificacion>>("/notificaciones", params),
 };
 

@@ -268,6 +268,10 @@ function unavailableCrudAction() {
   window.alert(CRUD_PHASE_MESSAGE);
 }
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Ocurrió un error inesperado.";
+}
+
 function paginatedFallback<T>(items: T[], page = 1, pageSize = DEFAULT_PAGE_SIZE): PaginatedResponse<T> {
   const start = (page - 1) * pageSize;
 
@@ -887,18 +891,19 @@ function AdminEmpresas() {
 }
 
 // ─── ADMIN: Ofertas ───────────────────────────────────────────────────────────
-function AdminOfertas({ useApi = true }: { useApi?: boolean }) {
+function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScreen?: (s: Screen) => void }) {
   const [selected, setSelected] = useState<AdminOferta | null>(null);
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
   const [modalidadFiltro, setModalidadFiltro] = useState("Todos");
   const [page, setPage] = useState(1);
+  const [refreshKey, setRefreshKey] = useState(0);
   const localOfertas = (OFERTAS as AdminOferta[]).filter(o => (estadoFiltro === "Todos" || o.estado_oferta === estadoFiltro) && (modalidadFiltro === "Todos" || o.modalidad === modalidadFiltro));
   const fallback = paginatedFallback(localOfertas, page);
   const remotePage = usePaginatedApiData(
     true,
     () => (useApi ? adminApi.ofertas : empresaApi.ofertas)({ page, pageSize: DEFAULT_PAGE_SIZE, estado: estadoFiltro, modalidad: modalidadFiltro }),
     fallback,
-    [useApi, page, estadoFiltro, modalidadFiltro]
+    [useApi, page, estadoFiltro, modalidadFiltro, refreshKey]
   );
   const ofertasPage = remotePage;
   const filtered = ofertasPage.items;
@@ -906,6 +911,73 @@ function AdminOfertas({ useApi = true }: { useApi?: boolean }) {
   useEffect(() => {
     setPage(1);
   }, [estadoFiltro, modalidadFiltro]);
+
+  async function handleEditOferta(oferta: AdminOferta) {
+    if (useApi) {
+      unavailableCrudAction();
+      return;
+    }
+
+    const titulo = window.prompt("titulo", oferta.titulo);
+    if (titulo == null) return;
+    const descripcion = window.prompt("descripcion", oferta.descripcion);
+    if (descripcion == null) return;
+    const puesto = window.prompt("puesto", oferta.puesto);
+    if (puesto == null) return;
+    const area = window.prompt("area", oferta.area);
+    if (area == null) return;
+    const ubicacion = window.prompt("ubicacion", oferta.ubicacion);
+    if (ubicacion == null) return;
+    const modalidad = window.prompt("modalidad", oferta.modalidad);
+    if (modalidad == null) return;
+    const tipo_contrato = window.prompt("tipo_contrato", oferta.tipo_contrato);
+    if (tipo_contrato == null) return;
+    const salarioRaw = window.prompt("salario", oferta.salario != null ? String(oferta.salario) : "");
+    if (salarioRaw == null) return;
+    const requisitos = window.prompt("requisitos", oferta.requisitos ?? "");
+    if (requisitos == null) return;
+    const fecha_cierre = window.prompt("fecha_cierre", oferta.fecha_cierre);
+    if (fecha_cierre == null) return;
+    const estado_oferta = window.prompt("estado_oferta", oferta.estado_oferta);
+    if (estado_oferta == null) return;
+
+    try {
+      await empresaApi.actualizarOferta(oferta.id_oferta, {
+        titulo,
+        descripcion,
+        puesto,
+        area,
+        ubicacion,
+        modalidad,
+        tipo_contrato,
+        salario: salarioRaw.trim() ? Number(salarioRaw) : null,
+        requisitos,
+        fecha_cierre,
+        estado_oferta,
+      });
+      window.alert("Oferta actualizada correctamente.");
+      setRefreshKey(k => k + 1);
+      setSelected(null);
+    } catch (error) {
+      window.alert(getErrorMessage(error));
+    }
+  }
+
+  async function handleCloseOferta(oferta: AdminOferta) {
+    if (useApi) {
+      unavailableCrudAction();
+      return;
+    }
+
+    try {
+      await empresaApi.cerrarOferta(oferta.id_oferta);
+      window.alert("Oferta cerrada correctamente.");
+      setRefreshKey(k => k + 1);
+      setSelected(null);
+    } catch (error) {
+      window.alert(getErrorMessage(error));
+    }
+  }
 
   return (
     <div>
@@ -929,7 +1001,7 @@ function AdminOfertas({ useApi = true }: { useApi?: boolean }) {
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Gestión de Ofertas Laborales" subtitle={`${ofertasPage.total} registros en tabla oferta_laboral`} action={<Btn onClick={unavailableCrudAction}><Plus size={14} /> Crear Oferta</Btn>} />
+      <PageHeader title="Gestión de Ofertas Laborales" subtitle={`${ofertasPage.total} registros en tabla oferta_laboral`} action={<Btn onClick={() => useApi ? unavailableCrudAction() : setScreen?.("emp-crear-oferta")}><Plus size={14} /> Crear Oferta</Btn>} />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
           <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={{ padding: "7px 11px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 13, color: "#374151", outline: "none", fontFamily: "inherit" }}>
@@ -957,8 +1029,8 @@ function AdminOfertas({ useApi = true }: { useApi?: boolean }) {
                   <TD>
                     <div style={{ display: "flex", gap: 2 }}>
                       <Btn variant="outline" small onClick={() => setSelected(o)}><Eye size={14} /></Btn>
-                      <Btn variant="ghost" small onClick={unavailableCrudAction}><Edit2 size={14} /></Btn>
-                      <Btn variant="outline" small onClick={unavailableCrudAction}>Cerrar</Btn>
+                      <Btn variant="ghost" small onClick={() => handleEditOferta(o)}><Edit2 size={14} /></Btn>
+                      <Btn variant="outline" small onClick={() => handleCloseOferta(o)}>Cerrar</Btn>
                     </div>
                   </TD>
                 </tr>
@@ -1281,7 +1353,7 @@ function EmpresaDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
           <div style={{ color: "#fff", fontSize: 22, fontWeight: 700 }}>{profile?.razon_social ?? "Empresa"}</div>
           <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, marginTop: 4 }}>RUC: {profile?.ruc ?? "—"} · Sector {profile?.sector ?? "—"}</div>
         </div>
-        <button onClick={unavailableCrudAction} style={{ padding: "11px 22px", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.28)", borderRadius: 10, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>+ Publicar Oferta</button>
+        <button onClick={() => setScreen("emp-crear-oferta")} style={{ padding: "11px 22px", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.28)", borderRadius: 10, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>+ Publicar Oferta</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 24 }}>
         <StatCard icon={<Briefcase size={21} />} label="Ofertas Publicadas" value={dashboard.counts.totalOfertas.toLocaleString()} sub={`${dashboard.counts.ofertasCerradas.toLocaleString()} cerradas`} color="#2563EB" />
@@ -1328,7 +1400,7 @@ function EmpresaDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
             { label: "Revisar Postulaciones", screen: "emp-postulaciones" as Screen, icon: <Users size={16} />, color: "#10B981" },
             { label: "Mis Ofertas", screen: "admin-ofertas" as Screen, icon: <Briefcase size={16} />, color: "#6366F1" },
           ].map(ql => (
-            <button key={ql.label} onClick={() => ql.screen === "emp-crear-oferta" ? unavailableCrudAction() : setScreen(ql.screen)} style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderRadius: 10, border: "1px solid #E2E8F0", background: "#F8FAFC", cursor: "pointer", fontFamily: "inherit" }}>
+            <button key={ql.label} onClick={() => setScreen(ql.screen)} style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderRadius: 10, border: "1px solid #E2E8F0", background: "#F8FAFC", cursor: "pointer", fontFamily: "inherit" }}>
               <div style={{ width: 34, height: 34, borderRadius: 8, background: ql.color + "18", display: "flex", alignItems: "center", justifyContent: "center", color: ql.color }}>{ql.icon}</div>
               <span style={{ fontSize: 13, fontWeight: 600, color: "#0F172A" }}>{ql.label}</span>
             </button>
@@ -1343,36 +1415,75 @@ function EmpresaDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
 // Campos según tabla oferta_laboral: titulo*, descripcion*, puesto*, area*, ubicacion*, modalidad*, tipo_contrato*, salario, requisitos, fecha_cierre*
 // fecha_publicacion: se asigna automáticamente. id_empresa: de la sesión activa.
 function CrearOferta() {
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const fecha_cierre = String(form.get("fecha_cierre") ?? "");
+    const salarioRaw = String(form.get("salario") ?? "").trim();
+    const salario = salarioRaw ? Number(salarioRaw) : null;
+
+    if (salario !== null && salario <= 0) {
+      window.alert("El salario debe ser mayor a 0 si se informa.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await empresaApi.crearOferta({
+        titulo: String(form.get("titulo") ?? ""),
+        descripcion: String(form.get("descripcion") ?? ""),
+        puesto: String(form.get("puesto") ?? ""),
+        area: String(form.get("area") ?? ""),
+        ubicacion: String(form.get("ubicacion") ?? ""),
+        modalidad: String(form.get("modalidad") ?? ""),
+        tipo_contrato: String(form.get("tipo_contrato") ?? ""),
+        salario,
+        requisitos: String(form.get("requisitos") ?? ""),
+        fecha_cierre,
+        estado_oferta: "Activa",
+      });
+      event.currentTarget.reset();
+      window.alert("Oferta publicada correctamente.");
+    } catch (error) {
+      window.alert(getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div>
       <PageHeader title="Crear Oferta Laboral" subtitle="Tabla: oferta_laboral — los campos con * son NOT NULL" />
       <Card style={{ padding: 32, maxWidth: 820 }}>
+        <form onSubmit={handleSubmit}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
           <div style={{ gridColumn: "1 / -1" }}>
-            <FormField label="Título (VARCHAR 150)" required><input style={INP} placeholder="Ej: Software Architect" /></FormField>
+            <FormField label="Título (VARCHAR 150)" required><input name="titulo" style={INP} placeholder="Ej: Software Architect" /></FormField>
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
-            <FormField label="Descripción (TEXT)" required><textarea style={{ ...INP, height: 100, resize: "vertical" }} placeholder="Descripción del puesto..." /></FormField>
+            <FormField label="Descripción (TEXT)" required><textarea name="descripcion" style={{ ...INP, height: 100, resize: "vertical" }} placeholder="Descripción del puesto..." /></FormField>
           </div>
-          <FormField label="Puesto (VARCHAR 100)" required><input style={INP} placeholder="Ej: QA Engineer" /></FormField>
+          <FormField label="Puesto (VARCHAR 100)" required><input name="puesto" style={INP} placeholder="Ej: QA Engineer" /></FormField>
           <FormField label="Área (VARCHAR 100)" required>
-            <select style={INP}>
+            <select name="area" style={INP}>
               <option>Seleccionar...</option>
               {["Tecnología", "Finanzas", "Salud", "Industrial", "Educación", "Retail", "Telecomunicaciones", "Logística"].map(a => <option key={a}>{a}</option>)}
             </select>
           </FormField>
-          <FormField label="Ubicación (VARCHAR 150)" required><input style={INP} placeholder="Ej: Huánuco" /></FormField>
+          <FormField label="Ubicación (VARCHAR 150)" required><input name="ubicacion" style={INP} placeholder="Ej: Huánuco" /></FormField>
           <FormField label="Modalidad (VARCHAR 50)" required>
-            <select style={INP}><option>Presencial</option><option>Remoto</option><option>Híbrido</option></select>
+            <select name="modalidad" style={INP}><option>Presencial</option><option>Remoto</option><option>Híbrido</option></select>
           </FormField>
           <FormField label="Tipo de contrato (VARCHAR 50)" required>
-            <select style={INP}><option>Indefinido</option><option>Temporal</option><option>Practicante</option></select>
+            <select name="tipo_contrato" style={INP}><option>Indefinido</option><option>Temporal</option><option>Practicante</option></select>
           </FormField>
-          <FormField label="Salario — DECIMAL(10,2)" hint="Campo nullable. Dejar vacío si no se desea publicar."><input style={INP} type="number" step="0.01" placeholder="Ej: 3500.00" /></FormField>
+          <FormField label="Salario — DECIMAL(10,2)" hint="Campo nullable. Dejar vacío si no se desea publicar."><input name="salario" style={INP} type="number" step="0.01" placeholder="Ej: 3500.00" /></FormField>
           <div style={{ gridColumn: "1 / -1" }}>
-            <FormField label="Requisitos (TEXT)" hint="Campo nullable."><textarea style={{ ...INP, height: 80, resize: "vertical" }} placeholder="Ej: Disponibilidad inmediata..." /></FormField>
+            <FormField label="Requisitos (TEXT)" hint="Campo nullable."><textarea name="requisitos" style={{ ...INP, height: 80, resize: "vertical" }} placeholder="Ej: Disponibilidad inmediata..." /></FormField>
           </div>
-          <FormField label="Fecha cierre (DATE)" required><input style={INP} type="date" /></FormField>
+          <FormField label="Fecha cierre (DATE)" required><input name="fecha_cierre" style={INP} type="date" /></FormField>
           <div style={{ display: "flex", alignItems: "flex-end" }}>
             <div style={{ padding: "10px 14px", background: "#F8FAFC", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12, color: "#64748B", width: "100%" }}>
               <strong>fecha_publicacion</strong>: se asignará automáticamente (DATE NOT NULL = CURDATE()).
@@ -1380,9 +1491,10 @@ function CrearOferta() {
           </div>
         </div>
         <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
-          <button onClick={unavailableCrudAction} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Publicar Oferta</button>
+          <button type="submit" disabled={saving} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{saving ? "Publicando..." : "Publicar Oferta"}</button>
           <Btn variant="outline" onClick={unavailableCrudAction}>Cancelar</Btn>
         </div>
+        </form>
       </Card>
     </div>
   );
@@ -1395,6 +1507,7 @@ function PostulacionesRecibidas() {
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<EmpresaPostulacion | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const localPostulaciones = (POSTULACIONES as EmpresaPostulacion[]).filter(p => {
     const q = search.toLowerCase();
     return `${p.egresado} ${p.carrera}`.toLowerCase().includes(q) && (estadoFiltro === "Todos" || p.estado_postulacion === estadoFiltro);
@@ -1404,13 +1517,23 @@ function PostulacionesRecibidas() {
     true,
     () => empresaApi.postulaciones({ page, pageSize: DEFAULT_PAGE_SIZE, search, estado: estadoFiltro }),
     fallback,
-    [page, search, estadoFiltro]
+    [page, search, estadoFiltro, refreshKey]
   );
   const filtered = postulacionesPage.items;
 
   useEffect(() => {
     setPage(1);
   }, [search, estadoFiltro]);
+
+  async function handleEstadoPostulacion(id: number, estado: "Aceptado" | "Rechazado" | "Pendiente") {
+    try {
+      await empresaApi.cambiarEstadoPostulacion(id, estado);
+      window.alert("Estado de postulación actualizado correctamente.");
+      setRefreshKey(k => k + 1);
+    } catch (error) {
+      window.alert(getErrorMessage(error));
+    }
+  }
 
   return (
     <div>
@@ -1454,8 +1577,8 @@ function PostulacionesRecibidas() {
                 <TD>
                   <div style={{ display: "flex", gap: 4 }}>
                     <Btn variant="outline" small onClick={() => setSelected(p)}><FileText size={13} /> Ver CV</Btn>
-                    <button onClick={unavailableCrudAction} style={{ padding: "5px 10px", background: "#DCFCE7", border: "none", borderRadius: 7, cursor: "pointer" }}><CheckCircle size={13} color="#166534" /></button>
-                    <button onClick={unavailableCrudAction} style={{ padding: "5px 10px", background: "#FEE2E2", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 12, color: "#991B1B" }}>✕</button>
+                    <button onClick={() => handleEstadoPostulacion(p.id_postulacion, "Aceptado")} style={{ padding: "5px 10px", background: "#DCFCE7", border: "none", borderRadius: 7, cursor: "pointer" }}><CheckCircle size={13} color="#166534" /></button>
+                    <button onClick={() => handleEstadoPostulacion(p.id_postulacion, "Rechazado")} style={{ padding: "5px 10px", background: "#FEE2E2", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 12, color: "#991B1B" }}>✕</button>
                   </div>
                 </TD>
               </tr>
@@ -1475,32 +1598,58 @@ function PostulacionesRecibidas() {
 // NOTA: la tabla empresa NO tiene campo `descripcion`.
 function PerfilEmpresa() {
   const profile = useApiData(true, empresaApi.perfil, EMPRESAS[0] as AdminEmpresa | null) ?? EMPRESAS[0];
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+
+    setSaving(true);
+    try {
+      await empresaApi.actualizarPerfil({
+        nombre_comercial: String(form.get("nombre_comercial") ?? ""),
+        sector: String(form.get("sector") ?? ""),
+        direccion: String(form.get("direccion") ?? ""),
+        telefono: String(form.get("telefono") ?? ""),
+        correo: String(form.get("correo") ?? ""),
+        pagina_web: String(form.get("pagina_web") ?? ""),
+      });
+      window.alert("Perfil actualizado correctamente.");
+    } catch (error) {
+      window.alert(getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div>
       <PageHeader title="Perfil de Empresa" subtitle="Tabla: empresa + correo de usuario.correo (JOIN). Sin campo descripcion." />
       <Card key={profile.id_usuario} style={{ padding: 32, maxWidth: 820 }}>
+        <form onSubmit={handleSubmit}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
           <FormField label="RUC — CHAR(11)" required><input style={INP} defaultValue={profile.ruc} maxLength={11} /></FormField>
           <FormField label="Razón social (VARCHAR 150)" required><input style={INP} defaultValue={profile.razon_social} /></FormField>
-          <FormField label="Nombre comercial (VARCHAR 150)"><input style={INP} defaultValue={profile.nombre_comercial ?? ""} /></FormField>
+          <FormField label="Nombre comercial (VARCHAR 150)"><input name="nombre_comercial" style={INP} defaultValue={profile.nombre_comercial ?? ""} /></FormField>
           <FormField label="Sector (VARCHAR 100)" required>
-            <select style={INP} defaultValue={profile.sector}>{["Salud", "Tecnología", "Finanzas", "Industrial", "Retail", "Educación", "Telecomunicaciones", profile.sector].filter((s, i, arr) => arr.indexOf(s) === i).map(s => <option key={s}>{s}</option>)}</select>
+            <select name="sector" style={INP} defaultValue={profile.sector}>{["Salud", "Tecnología", "Finanzas", "Industrial", "Retail", "Educación", "Telecomunicaciones", profile.sector].filter((s, i, arr) => arr.indexOf(s) === i).map(s => <option key={s}>{s}</option>)}</select>
           </FormField>
           <div style={{ gridColumn: "1 / -1" }}>
-            <FormField label="Dirección (VARCHAR 255)" required><input style={INP} defaultValue={profile.direccion} /></FormField>
+            <FormField label="Dirección (VARCHAR 255)" required><input name="direccion" style={INP} defaultValue={profile.direccion} /></FormField>
           </div>
-          <FormField label="Teléfono (VARCHAR 15)"><input style={INP} defaultValue={profile.telefono ?? ""} maxLength={15} /></FormField>
+          <FormField label="Teléfono (VARCHAR 15)"><input name="telefono" style={INP} defaultValue={profile.telefono ?? ""} maxLength={15} /></FormField>
           <FormField label="Correo — usuario.correo (vía JOIN)" hint="Este campo pertenece a la tabla usuario, no a empresa. Se actualiza mediante UPDATE usuario SET correo.">
-            <input style={INP} type="email" defaultValue={profile.correo} />
+            <input name="correo" style={INP} type="email" defaultValue={profile.correo} />
           </FormField>
           <div style={{ gridColumn: "1 / -1" }}>
-            <FormField label="Página web (VARCHAR 100)"><input style={INP} defaultValue={profile.pagina_web ?? ""} maxLength={100} /></FormField>
+            <FormField label="Página web (VARCHAR 100)"><input name="pagina_web" style={INP} defaultValue={profile.pagina_web ?? ""} maxLength={100} /></FormField>
           </div>
         </div>
         <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
-          <button onClick={unavailableCrudAction} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Guardar Cambios</button>
+          <button type="submit" disabled={saving} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{saving ? "Guardando..." : "Guardar Cambios"}</button>
           <Btn variant="outline" onClick={unavailableCrudAction}>Cancelar</Btn>
         </div>
+        </form>
       </Card>
     </div>
   );
@@ -2258,7 +2407,7 @@ export default function App() {
       case "admin-dashboard": return <AdminDashboard setScreen={setScreen} />;
       case "admin-egresados": return <AdminEgresados />;
       case "admin-empresas": return <AdminEmpresas />;
-      case "admin-ofertas": return <AdminOfertas useApi={role === "admin"} />;
+      case "admin-ofertas": return <AdminOfertas useApi={role === "admin"} setScreen={setScreen} />;
       case "admin-encuestas": return <AdminEncuestas />;
       case "admin-reportes": return <Reportes />;
       case "admin-config": return <Configuracion />;

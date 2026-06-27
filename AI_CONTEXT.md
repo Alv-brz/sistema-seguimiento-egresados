@@ -12,7 +12,7 @@ El repositorio combina:
 - Backend REST Express/TypeScript en `backend/`.
 - Base de datos MySQL documentada por scripts SQL en `Database/`.
 
-La base de datos es la fuente de verdad del dominio. El frontend actual ya contiene pantallas y datos mock alineados a tablas reales, pero solo la autenticacion esta integrada contra el backend.
+La base de datos es la fuente de verdad del dominio. El frontend conserva algunos datos mock en pantallas no integradas, pero administrador, empresa y egresado ya consumen datos reales en sus flujos principales. El rol Empresa tambien tiene escritura real aprobada para ofertas, postulaciones recibidas y perfil propio.
 
 ## Tecnologias
 
@@ -120,6 +120,11 @@ El backend es una API REST modular bajo `/api`:
 - `GET /api/empresa/ofertas`: ofertas de la empresa autenticada.
 - `GET /api/empresa/postulaciones`: postulaciones recibidas por ofertas de la empresa autenticada.
 - `GET /api/empresa/perfil`: datos reales de empresa + usuario de la empresa autenticada.
+- `POST /api/empresa/ofertas`: publica una oferta para la empresa autenticada.
+- `PUT /api/empresa/ofertas/:id`: edita una oferta propia de la empresa autenticada.
+- `PATCH /api/empresa/ofertas/:id/cerrar`: cierra una oferta propia de la empresa autenticada.
+- `PATCH /api/empresa/postulaciones/:id/estado`: cambia estado de una postulacion asociada a oferta propia.
+- `PUT /api/empresa/perfil`: actualiza datos propios de empresa y correo de usuario.
 - `GET /api/egresado/dashboard`: resumen del egresado autenticado.
 - `GET /api/egresado/bolsa`: ofertas activas disponibles para egresados.
 - `GET /api/egresado/postulaciones`: postulaciones del egresado autenticado.
@@ -127,7 +132,7 @@ El backend es una API REST modular bajo `/api`:
 - `GET /api/egresado/historial`: historial laboral del egresado autenticado.
 - `GET /api/egresado/encuesta`: ultima encuesta asociada al egresado autenticado.
 
-Los endpoints de lectura inicial estan implementados para pantallas de administrador, empresa y egresado. No hay todavia endpoints de escritura ni CRUD.
+Los endpoints de lectura inicial estan implementados para pantallas de administrador, empresa y egresado. El CRUD de Empresa ya esta implementado para publicar/editar/cerrar ofertas, cambiar estado de postulaciones propias y actualizar perfil propio.
 
 ## Flujo Frontend/Backend
 
@@ -326,9 +331,10 @@ Backend implementado:
 Backend pendiente:
 
 - Modulos REST para postulaciones, historial laboral y reportes especificos no cubiertos por dashboard.
-- Servicios de lectura/escritura usando vistas/procedimientos.
-- Filtros, paginacion y validaciones de entrada.
-- Manejo de permisos por entidad.
+- Escrituras para Egresado y Administrador, aun no aprobadas.
+- Reportes especificos fuera de dashboard.
+- Validaciones de entrada formales para modulos pendientes.
+- Manejo de permisos por entidad fuera del CRUD Empresa ya implementado.
 
 ## Convenciones de Codigo
 
@@ -357,8 +363,9 @@ Backend:
 - Errores de DB deben pasar por `errorHandler`.
 - Responder JSON uniforme con `ok`.
 - Usar `requireAuth` y `requireRole` en rutas protegidas.
-- La fase actual solo permite `SELECT`; no introducir `INSERT`, `UPDATE`, `DELETE` ni CRUD hasta aprobacion de fase posterior.
+- Las fases de lectura solo permiten `SELECT`; la excepcion aprobada es CRUD Empresa para ofertas, postulaciones propias y perfil propio.
 - Los endpoints de listados devuelven objetos paginados con `items`, `total`, `page` y `pageSize`.
+- Para CRUD Empresa, toda escritura debe usar `res.locals.auth.id_usuario` y validar propiedad con `WHERE ... id_empresa = ?` o joins equivalentes.
 
 Base de datos:
 
@@ -398,6 +405,8 @@ Base de datos:
 - Los listados admin usan paginacion real con `LIMIT/OFFSET` y filtros server-side.
 - Las pantallas de empresa ya consumen datos reales de MySQL para dashboard, mis ofertas, postulaciones recibidas, perfil y notificaciones.
 - Las consultas de empresa filtran siempre por el `id_usuario` obtenido del JWT, que corresponde a `empresa.id_usuario`.
+- El CRUD de empresa usa SQL directo parametrizado porque los procedimientos existentes no cubren todos los campos del formulario. `sp_cerrar_oferta` existe, pero se usa `UPDATE ... WHERE id_empresa = ?` para detectar `affectedRows` y devolver 404 si la oferta no es propia.
+- Estados permitidos al cambiar postulaciones desde empresa: `Pendiente`, `Aceptado`, `Rechazado`. No usar `En Proceso` para nuevas actualizaciones.
 - Las pantallas de egresado ya consumen datos reales de MySQL para dashboard, bolsa laboral, mis postulaciones, perfil, historial laboral, encuesta y notificaciones.
 - Las consultas personales de egresado filtran siempre por el `id_usuario` obtenido del JWT, que corresponde a `egresado.id_usuario`.
 - Las acciones de editar, eliminar, cerrar oferta, guardar, exportar y marcar notificaciones en admin quedan bloqueadas con aviso hasta la fase CRUD.

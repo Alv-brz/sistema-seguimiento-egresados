@@ -11,6 +11,31 @@ export type EmpresaPostulacionesFilters = {
   estado?: string;
 };
 
+export type OfertaInput = {
+  titulo: string;
+  descripcion: string;
+  puesto: string;
+  area: string;
+  ubicacion: string;
+  modalidad: string;
+  tipo_contrato: string;
+  salario: number | null;
+  requisitos: string | null;
+  fecha_cierre: string;
+  estado_oferta: "Activa" | "Cerrada";
+};
+
+export type PostulacionEstado = "Pendiente" | "Aceptado" | "Rechazado";
+
+export type PerfilEmpresaInput = {
+  nombre_comercial: string | null;
+  sector: string;
+  direccion: string;
+  telefono: string | null;
+  pagina_web: string | null;
+  correo: string;
+};
+
 export async function getEmpresaDashboard(idEmpresa: number) {
   const [profileRows] = await pool.execute(
     `SELECT
@@ -249,4 +274,143 @@ export async function getEmpresaPerfil(idEmpresa: number) {
   );
 
   return (rows as unknown[])[0] ?? null;
+}
+
+export async function createEmpresaOferta(idEmpresa: number, input: OfertaInput) {
+  const [result] = await pool.execute(
+    `INSERT INTO oferta_laboral(
+       titulo,
+       descripcion,
+       puesto,
+       area,
+       ubicacion,
+       modalidad,
+       tipo_contrato,
+       salario,
+       requisitos,
+       fecha_publicacion,
+       fecha_cierre,
+       estado_oferta,
+       id_empresa
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, ?, ?)`,
+    [
+      input.titulo,
+      input.descripcion,
+      input.puesto,
+      input.area,
+      input.ubicacion,
+      input.modalidad,
+      input.tipo_contrato,
+      input.salario,
+      input.requisitos,
+      input.fecha_cierre,
+      input.estado_oferta,
+      idEmpresa,
+    ]
+  );
+
+  return result;
+}
+
+export async function updateEmpresaOferta(idEmpresa: number, idOferta: number, input: OfertaInput) {
+  const [result] = await pool.execute(
+    `UPDATE oferta_laboral
+     SET
+       titulo = ?,
+       descripcion = ?,
+       puesto = ?,
+       area = ?,
+       ubicacion = ?,
+       modalidad = ?,
+       tipo_contrato = ?,
+       salario = ?,
+       requisitos = ?,
+       fecha_cierre = ?,
+       estado_oferta = ?
+     WHERE id_oferta = ? AND id_empresa = ?`,
+    [
+      input.titulo,
+      input.descripcion,
+      input.puesto,
+      input.area,
+      input.ubicacion,
+      input.modalidad,
+      input.tipo_contrato,
+      input.salario,
+      input.requisitos,
+      input.fecha_cierre,
+      input.estado_oferta,
+      idOferta,
+      idEmpresa,
+    ]
+  );
+
+  return result;
+}
+
+export async function closeEmpresaOferta(idEmpresa: number, idOferta: number) {
+  const [result] = await pool.execute(
+    "UPDATE oferta_laboral SET estado_oferta = 'Cerrada' WHERE id_oferta = ? AND id_empresa = ?",
+    [idOferta, idEmpresa]
+  );
+
+  return result;
+}
+
+export async function updateEmpresaPostulacionEstado(
+  idEmpresa: number,
+  idPostulacion: number,
+  estado: PostulacionEstado
+) {
+  const [result] = await pool.execute(
+    `UPDATE postulacion p
+     INNER JOIN oferta_laboral o ON o.id_oferta = p.id_oferta
+     SET p.estado_postulacion = ?
+     WHERE p.id_postulacion = ? AND o.id_empresa = ?`,
+    [estado, idPostulacion, idEmpresa]
+  );
+
+  return result;
+}
+
+export async function updateEmpresaPerfil(idEmpresa: number, input: PerfilEmpresaInput) {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [empresaResult] = await connection.execute(
+      `UPDATE empresa
+       SET
+         nombre_comercial = ?,
+         sector = ?,
+         direccion = ?,
+         telefono = ?,
+         pagina_web = ?
+       WHERE id_usuario = ?`,
+      [
+        input.nombre_comercial,
+        input.sector,
+        input.direccion,
+        input.telefono,
+        input.pagina_web,
+        idEmpresa,
+      ]
+    );
+
+    const [usuarioResult] = await connection.execute(
+      "UPDATE usuario SET correo = ? WHERE id_usuario = ?",
+      [input.correo, idEmpresa]
+    );
+
+    await connection.commit();
+
+    return { empresaResult, usuarioResult };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }

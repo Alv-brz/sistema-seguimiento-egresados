@@ -21,6 +21,7 @@ Estado aprobado al 2026-06-26:
 - Paginacion y filtros reales agregados a listados de administrador.
 - Pantallas de empresa conectadas a endpoints reales de lectura MySQL filtrados por JWT.
 - Pantallas de egresado conectadas a endpoints reales de lectura MySQL filtrados por JWT.
+- CRUD Empresa implementado para ofertas, postulaciones recibidas y perfil propio.
 
 ## Fases Implementadas
 
@@ -230,6 +231,41 @@ Archivos modificados:
 - `AI_CONTEXT.md`
 - `PROJECT_STATUS.md`
 
+### Fase 7 - CRUD Empresa
+
+Estado: implementada en esta sesion.
+
+Incluye:
+
+- Publicacion real de ofertas desde Crear Oferta usando `id_empresa` derivado del JWT.
+- Edicion real de ofertas propias de la empresa autenticada.
+- Cierre real de ofertas propias cambiando `estado_oferta` a `Cerrada`.
+- Cambio real de estado de postulaciones propias a `Pendiente`, `Aceptado` o `Rechazado`.
+- Actualizacion real del perfil de empresa y correo de usuario.
+- Validaciones frontend/backend para salario, fechas, estado de oferta, correo y `pagina_web`.
+- Propiedad obligatoria por `id_usuario` del JWT; una empresa no puede modificar ofertas ni postulaciones de otra empresa.
+- Errores claros en frontend para validaciones y rechazos del backend.
+- Refresco de listados despues de crear, editar, cerrar y cambiar estado.
+- No se modifico `Database/`.
+
+Endpoints backend agregados:
+
+- `POST /api/empresa/ofertas`
+- `PUT /api/empresa/ofertas/:id`
+- `PATCH /api/empresa/ofertas/:id/cerrar`
+- `PATCH /api/empresa/postulaciones/:id/estado`
+- `PUT /api/empresa/perfil`
+
+Archivos modificados:
+
+- `backend/src/modules/empresa/empresa.routes.ts`
+- `backend/src/modules/empresa/empresa.controller.ts`
+- `backend/src/modules/empresa/empresa.service.ts`
+- `src/app/api.ts`
+- `src/app/App.tsx`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
 ## Funcionalidades Terminadas
 
 - Aplicacion frontend arranca con Vite.
@@ -268,19 +304,23 @@ Archivos modificados:
 - Historial laboral de egresado con datos reales.
 - Encuesta de seguimiento con ultima encuesta real.
 - Notificaciones reales para egresado.
+- Publicacion real de ofertas por empresa.
+- Edicion y cierre real de ofertas propias por empresa.
+- Cambio real de estado de postulaciones propias por empresa.
+- Actualizacion real de perfil empresa.
 
 ## Funcionalidades Pendientes
 
 - Consumir `GET /api/auth/me` al iniciar para validar sesion contra backend.
 - Endpoints backend para reportes.
 - Validacion de entrada por modulo.
-- Proteccion de permisos por rol y por propietario del recurso.
+- Proteccion de permisos por propietario del recurso para modulos pendientes fuera de Empresa.
 - Manejo formal de variables `.env` y documentacion de ejemplo si falta.
 - Pruebas automatizadas o checks de integracion.
 
 ## Fases Pendientes Recomendadas
 
-### Fase 7 - Validacion de Sesion
+### Fase 8 - Validacion de Sesion
 
 Objetivo:
 
@@ -294,17 +334,17 @@ Archivos probables:
 - `src/app/api.ts`
 - `src/app/App.tsx`
 
-### Fase 8 - Escrituras Controladas
+### Fase 9 - Escrituras Controladas Egresado/Admin
 
 Objetivo:
 
-- Crear/actualizar/cerrar ofertas.
 - Registrar postulaciones.
 - Registrar encuestas y asociarlas a egresado.
+- Completar escrituras pendientes de administrador si se aprueban.
 - Usar procedimientos almacenados existentes si calzan.
 - Respetar triggers y errores `SIGNAL`.
 
-### Fase 9 - Modularizacion Frontend
+### Fase 10 - Modularizacion Frontend
 
 Objetivo:
 
@@ -323,10 +363,11 @@ Estado:
 - Frontend admin consume endpoints reales de lectura.
 - Frontend empresa consume endpoints reales de lectura.
 - Frontend egresado consume endpoints reales de lectura.
+- Frontend empresa ejecuta escrituras reales aprobadas para ofertas, postulaciones y perfil.
 - Listados admin tienen paginacion/filtros reales.
-- Acciones de escritura/exportacion muestran aviso de fase CRUD.
+- Acciones de escritura/exportacion no implementadas fuera de Empresa muestran aviso de fase CRUD.
 - Base de datos intacta.
-- Proxima fase recomendada: Fase 7, validacion de sesion.
+- Proxima fase recomendada: Fase 8, validacion de sesion.
 
 ## Archivos Importantes por Area
 
@@ -355,7 +396,7 @@ Backend:
 - `backend/src/modules/encuestas/*`: lectura admin de encuestas.
 - `backend/src/modules/auditoria/*`: lectura de auditoria.
 - `backend/src/modules/notificaciones/*`: lectura de notificaciones.
-- `backend/src/modules/empresa/*`: lectura por JWT para dashboard, ofertas, postulaciones y perfil empresa.
+- `backend/src/modules/empresa/*`: lectura y CRUD aprobado por JWT para dashboard, ofertas, postulaciones y perfil empresa.
 - `backend/src/modules/egresado/*`: lectura por JWT para dashboard, bolsa laboral, postulaciones, perfil, historial y encuesta egresado.
 
 Base de datos:
