@@ -6,7 +6,7 @@ const router = Router();
 
 router.get("/dashboard", requireAuth, requireRole("egresado"), egresadoController.dashboard);
 router.get("/bolsa", requireAuth, requireRole("egresado"), egresadoController.bolsa);
-router.get("/carreras", requireAuth, requireRole("egresado"), egresadoController.carreras);
+router.get("/carreras", requireAuth, requireRole("admin", "egresado"), egresadoController.carreras);
 router.get("/postulaciones", requireAuth, requireRole("egresado"), egresadoController.postulaciones);
 router.post("/postulaciones", requireAuth, requireRole("egresado"), egresadoController.createPostulacion);
 router.get("/perfil", requireAuth, requireRole("egresado"), egresadoController.perfil);

@@ -4,14 +4,22 @@ import {
   countUnreadNotificaciones,
   createNotificacion,
   deleteNotificacion,
+  ensureEncuestaDisponibleNotificacion,
   listNotificaciones,
   markAllNotificacionesLeidas,
   markNotificacionLeida,
+  usuarioExists,
 } from "./notificaciones.service.js";
 import { getExactFilter, getPagination, getStringFilter } from "../../utils/pagination.js";
 import type { ResultSetHeader } from "mysql2";
+import { registerAuditEvent } from "../auditoria/auditoria.service.js";
 
 function parsePositiveId(value: string | undefined): number | null {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function parseOptionalPositiveId(value: unknown): number | null {
   const id = Number(value);
   return Number.isInteger(id) && id > 0 ? id : null;
 }
@@ -27,6 +35,10 @@ export const notificacionesController = {
     if (!auth) {
       res.status(401).json({ ok: false, reason: "missing-token" });
       return;
+    }
+
+    if (auth.role === "egresado") {
+      await ensureEncuestaDisponibleNotificacion(auth.id_usuario);
     }
 
     const data = await listNotificaciones(auth.id_usuario, getPagination(_req.query), {
@@ -54,7 +66,22 @@ export const notificacionesController = {
       return;
     }
 
-    const result = (await createNotificacion(auth.id_usuario, { titulo, mensaje })) as ResultSetHeader;
+    const requestedUserId = parseOptionalPositiveId((req.body as { id_usuario?: unknown }).id_usuario);
+    const targetUserId = requestedUserId ?? auth.id_usuario;
+
+    if (requestedUserId && !(await usuarioExists(requestedUserId))) {
+      res.status(404).json({ ok: false, error: "Usuario destinatario no encontrado." });
+      return;
+    }
+
+    const result = (await createNotificacion(targetUserId, { titulo, mensaje })) as ResultSetHeader;
+    await registerAuditEvent({
+      tabla: "notificacion",
+      accion: "INSERT",
+      idRegistro: result.insertId,
+      descripcion: `Notificación creada para usuario #${targetUserId}: ${titulo}`,
+      usuario: `Administrador #${auth.id_usuario}`,
+    });
     res.status(201).json({ ok: true, data: { id_notificacion: result.insertId } });
   }),
 
@@ -64,6 +91,10 @@ export const notificacionesController = {
     if (!auth) {
       res.status(401).json({ ok: false, reason: "missing-token" });
       return;
+    }
+
+    if (auth.role === "egresado") {
+      await ensureEncuestaDisponibleNotificacion(auth.id_usuario);
     }
 
     const unread = await countUnreadNotificaciones(auth.id_usuario);
@@ -122,6 +153,14 @@ export const notificacionesController = {
       res.status(404).json({ ok: false, error: "Notificación no encontrada para el usuario autenticado." });
       return;
     }
+
+    await registerAuditEvent({
+      tabla: "notificacion",
+      accion: "DELETE",
+      idRegistro: idNotificacion,
+      descripcion: "Notificación eliminada por administrador",
+      usuario: `Administrador #${auth.id_usuario}`,
+    });
 
     res.json({ ok: true });
   }),

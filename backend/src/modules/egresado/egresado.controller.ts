@@ -20,6 +20,7 @@ import {
   type HistorialLaboralInput,
 } from "./egresado.service.js";
 import type { ResultSetHeader } from "mysql2";
+import { ensureEncuestaDisponibleNotificacion } from "../notificaciones/notificaciones.service.js";
 
 function getAuthEgresadoId(res: Response): number | null {
   const auth = res.locals.auth;
@@ -330,6 +331,7 @@ export const egresadoController = {
     }
 
     const data = await getUltimaEncuesta(idEgresado);
+    await ensureEncuestaDisponibleNotificacion(idEgresado);
     res.json({ ok: true, data });
   }),
 

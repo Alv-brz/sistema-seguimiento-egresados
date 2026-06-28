@@ -7,6 +7,32 @@ export type AuditoriaFilters = {
   accion?: string;
 };
 
+export async function registerAuditEvent(input: {
+  tabla: string;
+  accion: "INSERT" | "UPDATE" | "DELETE";
+  idRegistro: number;
+  descripcion: string;
+  usuario?: string;
+}) {
+  await pool.execute(
+    `INSERT INTO auditoria(
+       tabla_afectada,
+       accion,
+       id_registro,
+       descripcion,
+       usuario_bd
+     )
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      input.tabla,
+      input.accion,
+      input.idRegistro,
+      input.descripcion,
+      input.usuario ?? null,
+    ]
+  );
+}
+
 export async function listAuditoria(
   pagination: PaginationInput,
   filters: AuditoriaFilters

@@ -60,6 +60,24 @@ export async function authenticateUser(
   }
 }
 
+export async function validateStoredSession(session: AuthSession): Promise<AuthSession | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${session.token}` },
+    });
+
+    const data = (await response.json()) as unknown;
+
+    if (response.ok && isAuthSuccess(data)) {
+      return data.session;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 export function getDemoCredentials(role: AuthRole): DemoCredentials {
   return DEMO_CREDENTIALS[role];
 }

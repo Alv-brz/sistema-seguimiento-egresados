@@ -18,6 +18,7 @@ import {
   getDemoSession,
   readStoredSession,
   saveSession,
+  validateStoredSession,
   type AuthRole,
   type AuthSession,
 } from "./auth";
@@ -513,6 +514,11 @@ function humanizeAction(value: string | null | undefined) {
   return value ? actions[value] ?? value : "—";
 }
 
+function humanizeAuditUser(value: string | null | undefined) {
+  if (!value) return "Sistema";
+  return value.includes("@") || value.includes("_") ? "Sistema" : value;
+}
+
 function isEmptySeries(data: Record<string, unknown>[], keys: string[]) {
   return data.length === 0 || data.every((item) => keys.every((key) => Number(item[key] ?? 0) === 0));
 }
@@ -992,24 +998,6 @@ function AdminEgresados() {
     }
   }
 
-  async function handleDelete(item: AdminEgresado) {
-    const confirmed = await requestConfirmation({
-      title: "Eliminar egresado",
-      message: `¿Deseas eliminar a ${item.nombre_egresado} ${item.apellidos_egresado}? Si el registro forma parte del historial del sistema, la base de datos bloqueará la operación. Puede desactivarlo.`,
-      confirmLabel: "Eliminar",
-      variant: "danger",
-    });
-    if (!confirmed) return;
-
-    try {
-      await adminApi.eliminarEgresado(item.id_usuario);
-      toast("success", "Egresado eliminado correctamente.");
-      setRefreshKey(k => k + 1);
-    } catch (error) {
-      toast("error", getErrorMessage(error));
-    }
-  }
-
   async function handleToggleEstado(item: AdminEgresado) {
     const nextEstado = item.estado_usuario === "Inactivo" ? "Activo" : "Inactivo";
     const confirmed = await requestConfirmation({
@@ -1106,7 +1094,7 @@ function AdminEgresados() {
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr><TH label="DNI" /><TH label="Nombres" /><TH label="Apellidos" /><TH label="Carrera" /><TH label="Facultad" /><TH label="Teléfono" /><TH label="Fecha de egreso" /><TH label="Sexo" /><TH label="Acciones" /></tr></thead>
+            <thead><tr><TH label="DNI" /><TH label="Nombres" /><TH label="Apellidos" /><TH label="Carrera" /><TH label="Facultad" /><TH label="Teléfono" /><TH label="Fecha de egreso" /><TH label="Sexo" /><TH label="Estado" /><TH label="Acciones" /></tr></thead>
             <tbody>
               {filtered.length === 0 && <EmptyState />}
               {filtered.map((e, i) => (
@@ -1118,13 +1106,13 @@ function AdminEgresados() {
                   <TD>{e.nombre_facultad}</TD>
                   <TD>{e.telefono}</TD>
                   <TD>{e.fecha_egreso}</TD>
-                  <TD><Badge label={e.sexo} variant={e.sexo === "M" ? "info" : "warning"} /></TD>
+                  <TD><Badge label={e.sexo === "M" ? "Masculino" : "Femenino"} variant={e.sexo === "M" ? "info" : "warning"} /></TD>
+                  <TD><StatusBadge label={e.estado_usuario} /></TD>
                   <TD>
                     <div style={{ display: "flex", gap: 2 }}>
                       <Btn variant="outline" small onClick={() => setSelected(e)}><Eye size={14} /></Btn>
                       <Btn variant="ghost" small onClick={() => setEditing(e)}><Edit2 size={14} /></Btn>
                       <Btn variant="outline" small onClick={() => handleToggleEstado(e)}>{e.estado_usuario === "Inactivo" ? "Reactivar" : "Desactivar"}</Btn>
-                      <Btn variant="danger" small onClick={() => handleDelete(e)}><Trash2 size={14} /></Btn>
                     </div>
                   </TD>
                 </tr>
@@ -1185,24 +1173,6 @@ function AdminEmpresas() {
       toast("error", getErrorMessage(error));
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleDelete(item: AdminEmpresa) {
-    const confirmed = await requestConfirmation({
-      title: "Eliminar empresa",
-      message: `¿Deseas eliminar "${item.razon_social}"? Si el registro forma parte del historial del sistema, la base de datos bloqueará la operación. Puede desactivarla.`,
-      confirmLabel: "Eliminar",
-      variant: "danger",
-    });
-    if (!confirmed) return;
-
-    try {
-      await adminApi.eliminarEmpresa(item.id_usuario);
-      toast("success", "Empresa eliminada correctamente.");
-      setRefreshKey(k => k + 1);
-    } catch (error) {
-      toast("error", getErrorMessage(error));
     }
   }
 
@@ -1300,7 +1270,6 @@ function AdminEmpresas() {
                     <Btn variant="outline" small onClick={() => setSelected(e)}><Eye size={14} /></Btn>
                     <Btn variant="ghost" small onClick={() => setEditing(e)}><Edit2 size={14} /></Btn>
                     <Btn variant="outline" small onClick={() => handleToggleEstado(e)}>{e.estado_usuario === "Inactivo" ? "Reactivar" : "Desactivar"}</Btn>
-                    <Btn variant="danger" small onClick={() => handleDelete(e)}><Trash2 size={14} /></Btn>
                   </div>
                 </TD>
               </tr>
@@ -2001,7 +1970,7 @@ function Auditoria() {
                   <TD mono>{a.id_registro}</TD>
                   <TD><span style={{ fontSize: 12, color: "#64748B" }}>{humanizeTechnicalText(a.descripcion)}</span></TD>
                   <TD><span style={{ fontSize: 12 }}>{a.fecha_evento}</span></TD>
-                  <TD mono>{a.usuario_bd}</TD>
+                  <TD>{humanizeAuditUser(a.usuario_bd)}</TD>
                 </tr>
               ))}
             </tbody>
@@ -2231,6 +2200,7 @@ function PostulacionesRecibidas() {
                 <TD>
                   <div style={{ display: "flex", gap: 4 }}>
                     <Btn variant="outline" small onClick={() => setSelected(p)}><FileText size={13} /> Ver CV</Btn>
+                    <button onClick={() => handleEstadoPostulacion(p.id_postulacion, "Pendiente")} style={{ padding: "5px 10px", background: "#EFF6FF", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 12, color: "#1E40AF" }}>Pendiente</button>
                     <button onClick={() => handleEstadoPostulacion(p.id_postulacion, "Aceptado")} style={{ padding: "5px 10px", background: "#DCFCE7", border: "none", borderRadius: 7, cursor: "pointer" }}><CheckCircle size={13} color="#166534" /></button>
                     <button onClick={() => handleEstadoPostulacion(p.id_postulacion, "Rechazado")} style={{ padding: "5px 10px", background: "#FEE2E2", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 12, color: "#991B1B" }}>✕</button>
                   </div>
@@ -2832,10 +2802,11 @@ function HistorialLaboral() {
   );
 }
 
-function EncuestaSeguimiento() {
+function EncuestaSeguimiento({ onNotificationsChanged }: { onNotificationsChanged?: () => void }) {
   const { toast } = useFeedback();
   const [refreshKey, setRefreshKey] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [notifiedAvailabilityKey, setNotifiedAvailabilityKey] = useState<string | null>(null);
   const loadEncuesta = useCallback(() => {
     void refreshKey;
     return egresadoApi.encuesta();
@@ -2844,6 +2815,14 @@ function EncuestaSeguimiento() {
   const lastSurveyDate = encuesta?.fecha_registro ?? "Sin encuesta";
   const nextSurveyDate = encuesta?.proxima_disponible ?? "Disponible";
   const canSubmit = encuesta == null || encuesta.can_submit === true || encuesta.can_submit === 1;
+
+  useEffect(() => {
+    const availabilityKey = encuesta?.proxima_disponible ?? null;
+    if (encuesta && canSubmit && availabilityKey && notifiedAvailabilityKey !== availabilityKey) {
+      onNotificationsChanged?.();
+      setNotifiedAvailabilityKey(availabilityKey);
+    }
+  }, [canSubmit, encuesta, notifiedAvailabilityKey]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2996,12 +2975,15 @@ function Notificaciones({ useApi = false, canManage = false, unreadTotal, onNoti
   const [refreshKey, setRefreshKey] = useState(0);
   const [creating, setCreating] = useState(false);
   const [savingCreate, setSavingCreate] = useState(false);
+  const isLeida = (value: ApiNotificacion["leido"]) => value === true || value === 1 || String(value) === "1";
   const localNotificaciones = (NOTIFICACIONES_DATA as ApiNotificacion[]).filter(n => {
     const q = search.toLowerCase();
-    const leida = n.leido === true || n.leido === 1;
+    const leida = isLeida(n.leido);
     return `${n.titulo} ${n.mensaje}`.toLowerCase().includes(q) && (estadoFiltro === "Todas" || (estadoFiltro === "Leídas" ? leida : !leida));
   });
-  const fallback = paginatedFallback(localNotificaciones, page);
+  const fallback = useApi
+    ? { items: [], total: 0, page, pageSize: DEFAULT_PAGE_SIZE }
+    : paginatedFallback(localNotificaciones, page);
   const notifsPage = usePaginatedApiData(
     useApi,
     () => adminApi.notificaciones({ page, pageSize: DEFAULT_PAGE_SIZE, search, estado: estadoFiltro }),
@@ -3097,7 +3079,7 @@ function Notificaciones({ useApi = false, canManage = false, unreadTotal, onNoti
     }
   }
 
-  const unread = useApi ? (unreadTotal ?? 0) : notifs.filter(n => !n.leido).length;
+  const unread = useApi ? (unreadTotal ?? 0) : notifs.filter(n => !isLeida(n.leido)).length;
 
   return (
     <div>
@@ -3134,20 +3116,22 @@ function Notificaciones({ useApi = false, canManage = false, unreadTotal, onNoti
             <div style={{ fontSize: 13, color: "#64748B" }}>No hay notificaciones para mostrar.</div>
           </Card>
         )}
-        {notifs.map((n) => (
-          <Card key={n.id_notificacion} style={{ padding: "18px 22px", borderLeft: `4px solid ${n.leido ? "#E2E8F0" : "#2563EB"}` }}>
+        {notifs.map((n) => {
+          const leida = isLeida(n.leido);
+          return (
+          <Card key={n.id_notificacion} style={{ padding: "18px 22px", borderLeft: `4px solid ${leida ? "#E2E8F0" : "#2563EB"}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                   <div style={{ fontWeight: 700, fontSize: 14, color: "#0F172A" }}>{n.titulo}</div>
-                  <Badge label={n.leido ? "Leída" : "No leída"} variant={n.leido ? "neutral" : "info"} />
+                  <Badge label={leida ? "Leída" : "No leída"} variant={leida ? "neutral" : "info"} />
                 </div>
                 <div style={{ fontSize: 13, color: "#64748B", lineHeight: 1.65, marginBottom: 8 }}>{n.mensaje}</div>
                 <div style={{ fontSize: 11, color: "#94A3B8", display: "flex", alignItems: "center", gap: 6 }}>
                   <Clock size={11} /> {n.fecha_envio}
                 </div>
               </div>
-              {!n.leido && (
+              {!leida && (
                 <button onClick={() => markRead(n.id_notificacion)} style={{ padding: "6px 12px", border: "1px solid #E2E8F0", borderRadius: 8, background: "#fff", fontSize: 12, cursor: "pointer", fontFamily: "inherit", color: "#374151", whiteSpace: "nowrap" }}>
                   Marcar leída
                 </button>
@@ -3159,7 +3143,7 @@ function Notificaciones({ useApi = false, canManage = false, unreadTotal, onNoti
               )}
             </div>
           </Card>
-        ))}
+        )})}
       </div>
       <div style={{ maxWidth: 760, marginTop: 12 }}>
         <Pagination total={useApi ? notifsPage.total : localNotificaciones.length} showing={notifs.length} page={useApi ? notifsPage.page : page} pageSize={useApi ? notifsPage.pageSize : DEFAULT_PAGE_SIZE} onPageChange={setPage} />
@@ -3310,6 +3294,7 @@ export default function App() {
 function AppContent() {
   const { toast } = useFeedback();
   const [session, setSession] = useState<AuthSession | null>(() => readStoredSession());
+  const [sessionChecked, setSessionChecked] = useState(() => readStoredSession() === null);
   const [screen, setScreenState] = useState<Screen>(() => {
     const storedSession = readStoredSession();
     return storedSession ? readLastScreenForRole(storedSession.role) : "admin-dashboard";
@@ -3319,6 +3304,42 @@ function AppContent() {
 
   const loggedIn = session != null;
   const role: Role = session?.role ?? "admin";
+
+  useEffect(() => {
+    let active = true;
+    const storedSession = readStoredSession();
+
+    if (!storedSession) {
+      setSessionChecked(true);
+      return () => {
+        active = false;
+      };
+    }
+
+    setSessionChecked(false);
+    validateStoredSession(storedSession)
+      .then((validSession) => {
+        if (!active) return;
+
+        if (validSession) {
+          saveSession(validSession);
+          setSession(validSession);
+          setScreenState(readLastScreenForRole(validSession.role));
+        } else {
+          clearSession();
+          setSession(null);
+          setScreenState("admin-dashboard");
+          setUnreadCount(0);
+        }
+      })
+      .finally(() => {
+        if (active) setSessionChecked(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -3355,6 +3376,7 @@ function AppContent() {
     saveSession(nextSession);
     saveLastScreenForRole(nextSession.role, HOME_BY_ROLE[nextSession.role]);
     setSession(nextSession);
+    setSessionChecked(true);
     setScreenState(HOME_BY_ROLE[nextSession.role]);
     toast("success", "Sesión iniciada correctamente.");
   }
@@ -3364,6 +3386,14 @@ function AppContent() {
     setSession(null);
     setScreenState("admin-dashboard");
     toast("info", "Sesión cerrada correctamente.");
+  }
+
+  if (!sessionChecked) {
+    return (
+      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", fontFamily: "Inter, system-ui, sans-serif", color: "#475569", background: "#F1F5F9", fontSize: 14 }}>
+        Validando sesión...
+      </div>
+    );
   }
 
   if (!loggedIn) return <LoginScreen onLogin={handleLogin} />;
@@ -3385,7 +3415,7 @@ function AppContent() {
       case "egr-dashboard": return <EgresadoDashboard setScreen={setScreen} />;
       case "egr-bolsa": return <BolsaLaboral />;
       case "egr-postulaciones": return <MisPostulaciones />;
-      case "egr-encuesta": return <EncuestaSeguimiento />;
+      case "egr-encuesta": return <EncuestaSeguimiento onNotificationsChanged={() => setNotificationsRefreshKey(k => k + 1)} />;
       case "egr-perfil": return <MiPerfil />;
       case "egr-historial": return <HistorialLaboral />;
       case "notificaciones": return <Notificaciones useApi={role === "admin" || role === "empresa" || role === "egresado"} canManage={role === "admin"} unreadTotal={unreadCount} onNotificationsChanged={() => setNotificationsRefreshKey(k => k + 1)} />;

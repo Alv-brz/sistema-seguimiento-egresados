@@ -378,6 +378,24 @@ export async function updateEmpresaOfertaEstado(
   return result;
 }
 
+export async function getEmpresaOfertaNotificationTargets(idEmpresa: number, idOferta: number) {
+  const [rows] = await pool.execute(
+    `SELECT DISTINCT
+       p.id_egresado,
+       o.titulo
+     FROM oferta_laboral o
+     INNER JOIN postulacion p ON p.id_oferta = o.id_oferta
+     WHERE o.id_oferta = ? AND o.id_empresa = ?`,
+    [idOferta, idEmpresa]
+  );
+
+  const items = rows as { id_egresado: number; titulo: string }[];
+  return {
+    titulo: items[0]?.titulo ?? "",
+    idEgresados: items.map((item) => item.id_egresado),
+  };
+}
+
 export async function deleteEmpresaOferta(idEmpresa: number, idOferta: number) {
   const [postulacionRows] = await pool.execute(
     `SELECT COUNT(*) AS total
@@ -414,6 +432,21 @@ export async function updateEmpresaPostulacionEstado(
   );
 
   return result;
+}
+
+export async function getEmpresaPostulacionNotificationTarget(idEmpresa: number, idPostulacion: number) {
+  const [rows] = await pool.execute(
+    `SELECT
+       p.id_egresado,
+       o.titulo
+     FROM postulacion p
+     INNER JOIN oferta_laboral o ON o.id_oferta = p.id_oferta
+     WHERE p.id_postulacion = ? AND o.id_empresa = ?
+     LIMIT 1`,
+    [idPostulacion, idEmpresa]
+  );
+
+  return (rows as { id_egresado: number; titulo: string }[])[0] ?? null;
 }
 
 export async function updateEmpresaPerfil(idEmpresa: number, input: PerfilEmpresaInput) {

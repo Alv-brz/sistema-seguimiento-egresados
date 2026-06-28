@@ -30,6 +30,9 @@ Estado aprobado al 2026-06-26:
 - Mejora general de usabilidad implementada: buscadores server-side en listados grandes, filtros visibles reducidos a los utiles y limpieza de etiquetas tecnicas SQL en formularios/vistas principales.
 - Dashboard y Reportes corregidos: KPIs/graficos usan backend real, Reportes envia filtros al backend y actualiza datos filtrados.
 - CRUD Administrador Fase B implementado: ofertas admin ya pueden crearse para empresas activas y notificaciones admin tienen crear/listar/marcar/eliminar.
+- Eventos automaticos y notificaciones del sistema implementados: postulaciones, cierre/reactivacion de ofertas, desactivacion/reactivacion de cuentas y disponibilidad de encuestas generan notificaciones reales sin WebSockets y con deduplicacion.
+- Flujo de lectura y visualizacion de notificaciones corregido: la app valida la sesion guardada con `/api/auth/me`, el modulo Notificaciones no muestra fallback mock cuando hay API real, `GET /api/notificaciones` y `unread-count` se verificaron por JWT para admin/empresa/egresado, y los filtros de leidas/no leidas funcionan con o sin tilde.
+- Estrategia de deduplicacion de notificaciones automaticas corregida: los eventos operativos ya no quedan bloqueados por 24 horas ni por texto repetido con eventos intermedios; solo se bloquea una notificacion equivalente reciente si sigue siendo la ultima del usuario, con bloqueo concurrente por `GET_LOCK`. Encuesta disponible deduplica por referencia de `id_encuesta`, sin impedir disponibilidades posteriores del mismo dia.
 
 ## Fases Implementadas
 
@@ -659,6 +662,132 @@ Verificacion realizada:
 - `rg` confirmo que no existen `alert()`, `confirm()` ni `prompt()` en `src/` ni `backend/`.
 - Revision de etiquetas visibles: no se agregaron tipos SQL ni nombres tecnicos visibles; coincidencias restantes son propiedades internas de datos.
 
+### Fase 16 - Eventos Automaticos y Notificaciones del Sistema
+
+Estado: implementada en esta sesion.
+
+Incluye:
+
+- Notificacion automatica al egresado cuando una empresa cambia una postulacion propia a `Pendiente`, `Aceptado` o `Rechazado`.
+- Notificacion automatica a todos los egresados postulantes cuando una empresa cierra una oferta propia.
+- Notificacion automatica a todos los egresados postulantes cuando una empresa reactiva una oferta propia.
+- Notificacion automatica al usuario afectado cuando un administrador desactiva una cuenta de egresado o empresa.
+- Notificacion automatica al usuario afectado cuando un administrador reactiva una cuenta de egresado o empresa.
+- Notificacion automatica al egresado cuando su encuesta vuelve a estar disponible segun `configuracion_sistema.tiempo_entre_encuestas_meses`.
+- Deduplicacion de notificaciones automaticas por usuario, titulo y mensaje para evitar eventos repetidos innecesarios.
+- Generacion de notificacion de encuesta disponible al consultar contador/listado de notificaciones o la pantalla de encuesta.
+- La empresa solo puede generar notificaciones derivadas de ofertas/postulaciones propias, usando `id_empresa` del JWT.
+- El administrador solo genera notificaciones administrativas desde rutas protegidas por rol.
+- No se agregaron WebSockets; el contador y listado se actualizan al consultar endpoints, volver al modulo o recargar.
+- No se modifico `Database/`, ni estilos globales ni diseno general.
+- Se mantuvieron JWT, roles, auditoria/triggers existentes, toasts, modales y confirmaciones propias.
+
+Archivos modificados:
+
+- `backend/src/modules/notificaciones/notificaciones.service.ts`
+- `backend/src/modules/notificaciones/notificaciones.controller.ts`
+- `backend/src/modules/empresa/empresa.service.ts`
+- `backend/src/modules/empresa/empresa.controller.ts`
+- `backend/src/modules/egresado/egresado.controller.ts`
+- `backend/src/modules/egresados/egresados.controller.ts`
+- `backend/src/modules/empresas/empresas.controller.ts`
+- `src/app/App.tsx`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+Verificacion realizada:
+
+- `npm.cmd run build` en `backend/`: correcto.
+- `npm.cmd run build` en frontend: correcto tras ejecutar fuera del sandbox por restriccion de acceso en la ruta de OneDrive; Vite solo reporto advertencia de chunk grande.
+- Prueba HTTP real con JWT empresa y egresado temporal: cambiar postulacion a `Aceptado` genera una notificacion al egresado.
+- Prueba HTTP real con JWT empresa y egresado temporal: cambiar postulacion a `Rechazado` genera una notificacion al egresado.
+- Prueba HTTP real con JWT empresa y egresado temporal: cambiar postulacion a `Pendiente` genera una notificacion al egresado.
+- Prueba HTTP real con JWT empresa y egresado temporal: cerrar oferta con postulante genera una notificacion al egresado.
+- Prueba HTTP real con JWT empresa y egresado temporal: reactivar oferta con postulante genera una notificacion al egresado.
+- Prueba HTTP real con JWT admin y egresado temporal: desactivar cuenta genera una notificacion al usuario afectado.
+- Prueba HTTP real con JWT admin y egresado temporal: reactivar cuenta genera una notificacion al usuario afectado.
+- Prueba HTTP real de duplicados: repetir estado `Aceptado` y cierre reciente no genero notificaciones duplicadas.
+- Prueba HTTP real de contador/listado: el egresado recibio 7 notificaciones esperadas y `unread-count` devolvio 7.
+- Prueba HTTP real de encuesta disponible: al consultar dos veces el contador se creo una sola notificacion de encuesta disponible.
+- `rg` confirmo que no existen `alert()`, `confirm()` ni `prompt()` en `src/` ni `backend/`.
+
+### Fase 17 - Correccion de Lectura y Visualizacion de Notificaciones
+
+Estado: implementada en esta sesion.
+
+Incluye:
+
+- Identificacion de causa raiz: con un JWT persistido vencido o invalido, el frontend seguia considerando la sesion local como valida; las llamadas reales a notificaciones fallaban y el hook de datos paginados reemplazaba el resultado por fallback local, por eso las notificaciones existian en MySQL pero no eran visibles en la pantalla.
+- Validacion de sesion guardada contra `GET /api/auth/me` al iniciar la app; si no es valida, se limpia `localStorage` y se muestra login.
+- Pantalla Notificaciones sin fallback mock cuando `useApi=true`, para no renderizar datos locales desincronizados frente a errores de API.
+- Normalizacion frontend de `leido` para renderizar correctamente valores `0`, `1`, `false`, `true` o strings equivalentes.
+- `GET /api/notificaciones` devuelve `leido + 0 AS leido`, filtra por el `id_usuario` autenticado y ordena por `fecha_envio DESC, id_notificacion DESC`.
+- Filtros backend de notificaciones robustos para `Leidas/Leídas` y `No leidas/No leídas`.
+- `POST /api/notificaciones` desde admin acepta opcionalmente `id_usuario` para crear una notificacion manual dirigida a un destinatario; si no se envia, conserva el comportamiento de crearla para el admin autenticado.
+- Contador y listado verificados sobre los mismos endpoints reales para admin, empresa y egresado.
+- No se modifico `Database/`, estilos globales ni diseno general.
+
+Archivos modificados:
+
+- `src/app/auth.ts`
+- `src/app/api.ts`
+- `src/app/App.tsx`
+- `backend/src/modules/notificaciones/notificaciones.controller.ts`
+- `backend/src/modules/notificaciones/notificaciones.service.ts`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+Verificacion realizada:
+
+- `npm.cmd run build` en `backend/`: correcto.
+- `npm.cmd run build` en frontend: correcto fuera del sandbox por restriccion de acceso en OneDrive; Vite solo reporto advertencia de chunk grande.
+- `rg` confirmo que no existen `alert()`, `confirm()` ni `prompt()` en `src/` ni `backend/src/`.
+- Prueba HTTP real con JWT admin, empresa y egresado temporal.
+- Prueba HTTP real: crear notificacion manual admin propia y verla como admin.
+- Prueba HTTP real: crear notificacion manual admin dirigida a empresa y verla como empresa.
+- Prueba HTTP real: crear notificacion manual admin dirigida a egresado y verla como egresado con `leido = 0`.
+- Prueba HTTP real: cambiar postulacion a `Aceptado`, repetir `Aceptado` y verificar que no se duplica, cambiar a `Rechazado` y ver notificaciones del egresado.
+- Prueba HTTP real: cerrar y reactivar oferta de empresa con postulante y ver notificaciones del egresado.
+- Prueba HTTP real: desactivar y reactivar cuenta de egresado desde admin y ver notificaciones del usuario afectado.
+- Prueba HTTP real: encuesta disponible genera una unica notificacion y el contador la incluye.
+- Prueba HTTP real: filtro `Todas` muestra leidas y no leidas; `No leidas` solo `leido = 0`; `Leidas` solo `leido = 1`.
+- Prueba HTTP real: marcar una notificacion como leida disminuye `unread-count`; marcar todas deja el contador en 0.
+
+### Fase 18 - Revision y Correccion de Deduplicacion de Notificaciones Automaticas
+
+Estado: implementada en esta sesion.
+
+Incluye:
+
+- Revision completa de la deduplicacion usada por cambios de estado de postulaciones, cierre/reactivacion de ofertas, desactivacion/reactivacion de cuentas de egresados y empresas, y encuesta disponible.
+- Identificacion del criterio anterior: `createAutomaticNotificacion()` comparaba `id_usuario + titulo + mensaje`; por defecto usaba una ventana de 24 horas, y encuesta disponible usaba `dedupeHours: null`, equivalente a deduplicacion permanente para el mismo titulo/mensaje.
+- Identificacion de riesgo funcional: una postulacion podia volver a `Aceptado`, una oferta podia volver a cerrarse o una cuenta podia volver a desactivarse dentro de 24 horas y la notificacion valida quedaba bloqueada por tener el mismo titulo/mensaje.
+- Identificacion de un problema adicional de precision temporal: la ventana se calculaba en JavaScript con `toISOString()` UTC y se comparaba contra `fecha_envio`/`NOW()` de MySQL, lo que podia desplazar la ventana por zona horaria.
+- Nuevo criterio para eventos operativos: deduplicacion por `id_usuario + titulo + mensaje` solo durante 30 segundos, calculada en MySQL con `DATE_SUB(NOW(), INTERVAL ? SECOND)`, y solo si esa notificacion equivalente sigue siendo la ultima notificacion del usuario. Esto evita spam por doble clic/doble HTTP, pero permite ciclos legitimos rapidos como `Aceptado -> Rechazado -> Pendiente -> Aceptado`.
+- Nuevo criterio para concurrencia: la decision de deduplicar/insertar notificaciones automaticas queda serializada con `GET_LOCK` por clave de evento, evitando que dos peticiones simultaneas pasen el `SELECT` y creen dos filas.
+- Nuevo criterio para encuesta disponible: ya no depende de deduplicacion permanente por texto ni de una frontera diaria por `fecha_registro`; el mensaje incluye `Referencia: <id_encuesta>` y se bloquea solo si ya existe esa misma notificacion de encuesta, permitiendo una nueva disponibilidad legitima aunque la encuesta posterior se registre el mismo dia.
+- Se mantuvo la proteccion contra duplicados accidentales por doble clic, doble peticion HTTP o repeticion inmediata del mismo evento.
+- No se reescribio el sistema de notificaciones, no se crearon tablas y no se modifico `Database/`.
+
+Archivos modificados:
+
+- `backend/src/modules/notificaciones/notificaciones.service.ts`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+Verificacion realizada:
+
+- `npm.cmd run build` en `backend/`: correcto.
+- `npm.cmd run build` en frontend: correcto fuera del sandbox por restriccion de acceso en OneDrive; Vite solo reporto advertencia de chunk grande.
+- `rg` confirmo que no existen `alert()`, `confirm()` ni `prompt()` en `src/` ni `backend/src/`.
+- Prueba HTTP real con JWT admin, empresa y egresado temporal.
+- Prueba HTTP real: cambio de postulacion `Pendiente -> Aceptado -> Rechazado -> Pendiente -> Aceptado` con doble peticion inmediata de `Aceptado`; resultado: `Aceptado=2`, `Rechazado=1`, `Pendiente=1`.
+- Prueba HTTP real: oferta `Cerrar -> Reactivar -> Cerrar nuevamente` con doble peticion inmediata de cierre; resultado: `Cerrada=2`, `Reactivada=1`.
+- Prueba HTTP real: cuenta de egresado `Desactivar -> Reactivar -> Desactivar nuevamente` con doble peticion inmediata; resultado: `Desactivada=2`, `Reactivada=1`.
+- Prueba HTTP real: cuenta de empresa `Desactivar -> Reactivar -> Desactivar nuevamente` con doble peticion inmediata; resultado: `Desactivada=2`, `Reactivada=1`.
+- Prueba HTTP real: encuesta con `tiempo_entre_encuestas_meses = 0`; recargas simultaneas de contador/listado no duplicaron la disponibilidad vigente y una encuesta posterior genero una segunda notificacion valida (`antes=1`, `despues=2`).
+- Prueba HTTP real: contador, listado, marcar una notificacion como leida y marcar todas como leidas siguieron funcionando (`antes_leer=13`, `tras_una=12`, `tras_todas=0`).
+
 ## Funcionalidades Terminadas
 
 - Aplicacion frontend arranca con Vite.
@@ -721,10 +850,16 @@ Verificacion realizada:
 - Dashboard de administrador con etiquetas amigables y datos reales desde backend.
 - Reportes y Estadisticas con filtros reales enviados al backend y KPIs/graficos filtrados.
 - CRUD Administrador Fase B para ofertas y notificaciones, manteniendo reglas de integridad de egresados, empresas y encuestas.
+- Notificaciones automaticas para cambios de estado de postulaciones.
+- Notificaciones automaticas para cierre y reactivacion de ofertas con postulantes.
+- Notificaciones automaticas para desactivacion y reactivacion administrativa de cuentas.
+- Notificacion automatica cuando una encuesta vuelve a estar disponible para el egresado.
+- Deduplicacion de notificaciones automaticas equivalentes para evitar repetidos inmediatos sin bloquear eventos legitimos posteriores.
+- Lectura y visualizacion de notificaciones corregida para administrador, empresa y egresado.
+- Validacion de sesion local contra `GET /api/auth/me` al iniciar la app.
 
 ## Funcionalidades Pendientes
 
-- Consumir `GET /api/auth/me` al iniciar para validar sesion contra backend.
 - Exportacion real de reportes a PDF/Excel.
 - Validacion de entrada por modulo.
 - Proteccion de permisos por propietario del recurso para modulos pendientes fuera de Empresa y Egresado.
@@ -733,21 +868,7 @@ Verificacion realizada:
 
 ## Fases Pendientes Recomendadas
 
-### Fase 16 - Validacion de Sesion
-
-Objetivo:
-
-- Validar sesion con `GET /api/auth/me` al cargar la app.
-- Manejar token invalido expirado cerrando sesion.
-- Mantener endpoints de solo lectura.
-
-Archivos probables:
-
-- `src/app/auth.ts`
-- `src/app/api.ts`
-- `src/app/App.tsx`
-
-### Fase 17 - Modularizacion Frontend
+### Fase 19 - Modularizacion Frontend
 
 Objetivo:
 
@@ -779,9 +900,10 @@ Estado:
 - Sistema global de mensajes y confirmaciones activo en toda la aplicacion; no quedan ventanas nativas del navegador.
 - Listados admin, empresa y egresado principales tienen paginacion, busqueda y filtros reales donde corresponde.
 - Reportes y Estadisticas actualiza KPIs y graficos al aplicar filtros.
+- Notificaciones se listan y cuentan desde endpoints reales por `id_usuario` autenticado; filtros, contador y marcado como leida quedan validados para admin, empresa y egresado.
 - Acciones de escritura/exportacion no implementadas fuera de Empresa, Egresado y Administrador aprobado muestran aviso informativo.
 - Base de datos intacta.
-- Proxima fase recomendada: validacion de sesion con `GET /api/auth/me` o modularizacion frontend si el usuario lo autoriza.
+- Proxima fase recomendada: modularizacion frontend o exportacion real de reportes, si el usuario lo autoriza.
 
 ## Archivos Importantes por Area
 

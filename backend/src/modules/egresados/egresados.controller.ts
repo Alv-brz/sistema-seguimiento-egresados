@@ -3,13 +3,14 @@ import type { ResultSetHeader } from "mysql2";
 import { asyncHandler } from "../../middleware/errorHandler.js";
 import {
   createEgresado,
-  deleteEgresado,
   listEgresados,
   updateEgresado,
   updateEgresadoEstado,
   type AdminEgresadoInput,
 } from "./egresados.service.js";
 import { getExactFilter, getPagination, getStringFilter } from "../../utils/pagination.js";
+import { registerAuditEvent } from "../auditoria/auditoria.service.js";
+import { notifyCuentaEstado } from "../notificaciones/notificaciones.service.js";
 
 function badRequest(res: Response, error: string) {
   res.status(400).json({ ok: false, error });
@@ -131,13 +132,10 @@ export const egresadosController = {
       return;
     }
 
-    const result = (await deleteEgresado(id)) as ResultSetHeader;
-    if (result.affectedRows === 0) {
-      res.status(404).json({ ok: false, error: "Egresado no encontrado." });
-      return;
-    }
-
-    res.json({ ok: true });
+    res.status(405).json({
+      ok: false,
+      error: "Los egresados no se eliminan físicamente. Use Desactivar para conservar el historial.",
+    });
   }),
 
   updateEstado: asyncHandler(async (req: Request, res: Response) => {
@@ -157,6 +155,15 @@ export const egresadosController = {
       res.status(404).json({ ok: false, error: "Egresado no encontrado." });
       return;
     }
+
+    await registerAuditEvent({
+      tabla: "egresado",
+      accion: "UPDATE",
+      idRegistro: id,
+      descripcion: `${estado === "Activo" ? "Reactivación" : "Desactivación"} de cuenta de egresado`,
+      usuario: `Administrador #${res.locals.auth?.id_usuario ?? "N/D"}`,
+    });
+    await notifyCuentaEstado({ idUsuario: id, estado });
 
     res.json({ ok: true });
   }),

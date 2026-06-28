@@ -127,13 +127,13 @@ El backend es una API REST modular bajo `/api`:
 - `GET /api/egresados`: listado de lectura para gestion admin de egresados.
 - `POST /api/egresados`: crea usuario + egresado desde administrador.
 - `PUT /api/egresados/:id`: actualiza usuario + egresado desde administrador.
-- `PATCH /api/egresados/:id/estado`: desactiva o reactiva la cuenta del egresado cambiando `usuario.estado_usuario`.
-- `DELETE /api/egresados/:id`: elimina egresado + usuario solo si la integridad referencial lo permite.
+- `PATCH /api/egresados/:id/estado`: desactiva o reactiva la cuenta del egresado cambiando `usuario.estado_usuario`; genera notificacion automatica para el usuario afectado.
+- `DELETE /api/egresados/:id`: no elimina fisicamente; responde 405 e indica usar Desactivar para conservar el historial.
 - `GET /api/empresas`: listado de lectura para gestion admin de empresas.
 - `POST /api/empresas`: crea usuario + empresa desde administrador.
 - `PUT /api/empresas/:id`: actualiza usuario + empresa desde administrador.
-- `PATCH /api/empresas/:id/estado`: desactiva o reactiva la cuenta de la empresa cambiando `usuario.estado_usuario`.
-- `DELETE /api/empresas/:id`: elimina empresa + usuario solo si la integridad referencial lo permite.
+- `PATCH /api/empresas/:id/estado`: desactiva o reactiva la cuenta de la empresa cambiando `usuario.estado_usuario`; genera notificacion automatica para el usuario afectado.
+- `DELETE /api/empresas/:id`: no elimina fisicamente; responde 405 e indica usar Desactivar para conservar ofertas e historial.
 - `GET /api/ofertas`: listado de lectura para gestion admin de ofertas.
 - `POST /api/ofertas`: crea una oferta desde administrador para una empresa activa.
 - `PUT /api/ofertas/:id`: actualiza cualquier oferta desde administrador.
@@ -145,7 +145,7 @@ El backend es una API REST modular bajo `/api`:
 - `GET /api/notificaciones/unread-count`: contador real de notificaciones no leidas del usuario autenticado.
 - `PATCH /api/notificaciones/:id/leida`: marca como leida una notificacion del usuario autenticado.
 - `PATCH /api/notificaciones/leer-todas`: marca como leidas todas las notificaciones del usuario autenticado.
-- `POST /api/notificaciones`: crea una notificacion propia desde administrador.
+- `POST /api/notificaciones`: crea una notificacion desde administrador. Si recibe `id_usuario`, la asigna a ese usuario destinatario; si no, la crea para el administrador autenticado.
 - `DELETE /api/notificaciones/:id`: elimina una notificacion propia desde administrador.
 - `GET /api/empresa/dashboard`: metricas y resumen de la empresa autenticada.
 - `GET /api/empresa/ofertas`: ofertas de la empresa autenticada.
@@ -153,10 +153,10 @@ El backend es una API REST modular bajo `/api`:
 - `GET /api/empresa/perfil`: datos reales de empresa + usuario de la empresa autenticada.
 - `POST /api/empresa/ofertas`: publica una oferta para la empresa autenticada.
 - `PUT /api/empresa/ofertas/:id`: edita una oferta propia de la empresa autenticada.
-- `PATCH /api/empresa/ofertas/:id/cerrar`: cierra una oferta propia de la empresa autenticada.
-- `PATCH /api/empresa/ofertas/:id/estado`: alterna una oferta propia entre `Activa` y `Cerrada`.
+- `PATCH /api/empresa/ofertas/:id/cerrar`: cierra una oferta propia de la empresa autenticada y notifica automaticamente a los egresados postulantes.
+- `PATCH /api/empresa/ofertas/:id/estado`: alterna una oferta propia entre `Activa` y `Cerrada` y notifica automaticamente a los egresados postulantes cuando corresponde.
 - `DELETE /api/empresa/ofertas/:id`: elimina una oferta propia solo si no tiene postulaciones asociadas.
-- `PATCH /api/empresa/postulaciones/:id/estado`: cambia estado de una postulacion asociada a oferta propia.
+- `PATCH /api/empresa/postulaciones/:id/estado`: cambia estado de una postulacion asociada a oferta propia y notifica automaticamente al egresado postulante si pasa a `Pendiente`, `Aceptado` o `Rechazado`.
 - `PUT /api/empresa/perfil`: actualiza datos propios de empresa y correo de usuario.
 - `GET /api/egresado/dashboard`: resumen del egresado autenticado.
 - `GET /api/egresado/bolsa`: ofertas activas disponibles para egresados.
@@ -164,7 +164,7 @@ El backend es una API REST modular bajo `/api`:
 - `GET /api/egresado/perfil`: datos reales de usuario + egresado + carrera + facultad.
 - `GET /api/egresado/historial`: historial laboral del egresado autenticado.
 - `GET /api/egresado/encuesta`: ultima encuesta asociada al egresado autenticado.
-- `GET /api/egresado/carreras`: catalogo de carreras activas para el perfil del egresado.
+- `GET /api/egresado/carreras`: catalogo de carreras activas para el perfil del egresado y formularios admin de egresados.
 - `POST /api/egresado/postulaciones`: registra postulacion del egresado autenticado a una oferta activa y vigente.
 - `PUT /api/egresado/perfil`: actualiza datos propios de `usuario` y `egresado`.
 - `POST /api/egresado/historial`: crea historial laboral propio.
@@ -172,11 +172,11 @@ El backend es una API REST modular bajo `/api`:
 - `DELETE /api/egresado/historial/:id`: elimina historial laboral propio.
 - `POST /api/egresado/encuesta`: registra encuesta de seguimiento y la asocia al egresado autenticado.
 
-Los endpoints de lectura inicial estan implementados para pantallas de administrador, empresa y egresado. El CRUD de Empresa ya esta cerrado para publicar, editar, cerrar, reactivar y eliminar ofertas propias, cambiar estado de postulaciones propias y actualizar perfil propio. El CRUD de Egresado ya esta cerrado para postulaciones, perfil, historial laboral, encuesta de seguimiento y notificaciones. CRUD Administrador Fase B esta implementado para egresados, empresas, ofertas, encuestas historicas y notificaciones propias del administrador. La gestion de encuestas de administrador es solo lectura/detalle: las encuestas respondidas forman parte del historial del egresado y no se eliminan.
+Los endpoints de lectura inicial estan implementados para pantallas de administrador, empresa y egresado. El CRUD de Empresa ya esta cerrado para publicar, editar, cerrar, reactivar y eliminar ofertas propias, cambiar estado de postulaciones propias y actualizar perfil propio. El CRUD de Egresado ya esta cerrado para postulaciones, perfil, historial laboral, encuesta de seguimiento y notificaciones. CRUD Administrador Fase B esta implementado para egresados, empresas, ofertas, encuestas historicas y notificaciones administrables. La gestion de encuestas de administrador es solo lectura/detalle: las encuestas respondidas forman parte del historial del egresado y no se eliminan. La fase de eventos automaticos y notificaciones del sistema esta implementada: cambios de postulacion, cierre/reactivacion de ofertas, desactivacion/reactivacion de cuentas y disponibilidad de encuesta generan notificaciones reales en `notificacion`, con deduplicacion por usuario, titulo y mensaje. El flujo de lectura de notificaciones fue estabilizado para validar la sesion guardada con `/api/auth/me`, listar solo el usuario autenticado, no mostrar fallback mock cuando existe API real, normalizar `leido` y aceptar filtros `leidas/no leidas` con o sin tilde.
 
 ## Flujo Frontend/Backend
 
-1. El usuario ve `LoginScreen` si no hay sesion valida en `localStorage`.
+1. Al cargar, si existe sesion en `localStorage`, el frontend la valida contra `GET /api/auth/me`; si el token expiro, es invalido o el rol ya no coincide, elimina la sesion local y vuelve a `LoginScreen`.
 2. `src/app/auth.ts` llama a `POST {VITE_API_URL}/auth/login`.
 3. Si el backend devuelve `{ ok: true, session }`, el frontend guarda la sesion en `localStorage` con key `seg_egresado_bolsa.session`.
 4. `App.tsx` asigna la pantalla inicial segun el rol.
@@ -467,7 +467,7 @@ Base de datos:
 - La gestion admin de egresados y empresas mantiene eliminacion solo si MySQL lo permite, pero la alternativa principal para registros con historial es desactivar/reactivar la cuenta actualizando `usuario.estado_usuario`.
 - La gestion admin de encuestas no muestra ni expone eliminacion; solo permite ver detalle porque las respuestas forman parte del historial del egresado.
 - La gestion admin de ofertas permite crear ofertas para empresas activas, editar, cerrar/reactivar y eliminar solo si no existen postulaciones asociadas.
-- La gestion admin de notificaciones permite crear, listar, ver, buscar, filtrar, marcar como leida y eliminar notificaciones propias del administrador. Empresa y Egresado solo pueden listar/marcar sus propias notificaciones.
+- La gestion admin de notificaciones permite crear, listar, ver, buscar, filtrar, marcar como leida y eliminar notificaciones. La creacion puede ser propia o dirigida a un `id_usuario` destinatario desde backend. Empresa y Egresado solo pueden listar/marcar sus propias notificaciones.
 - La pantalla `Mis Ofertas` de empresa edita ofertas con modal/formulario completo, no con `prompt()`, y permite alternar `Activa`/`Cerrada` desde la tabla.
 - Estados permitidos al cambiar postulaciones desde empresa: `Pendiente`, `Aceptado`, `Rechazado`. No usar `En Proceso` para nuevas actualizaciones.
 - Las pantallas de egresado ya consumen datos reales de MySQL para dashboard, bolsa laboral, mis postulaciones, perfil, historial laboral, encuesta y notificaciones.
@@ -479,6 +479,9 @@ Base de datos:
 - Historial laboral valida salario no negativo, fechas coherentes y propiedad por `id_egresado`.
 - Encuesta de seguimiento respeta `configuracion_sistema.tiempo_entre_encuestas_meses`; `0` permite responder inmediatamente.
 - Notificaciones permite marcar una o todas como leidas para el usuario autenticado y actualiza el contador real del badge.
+- Las notificaciones automaticas se crean desde backend con helpers en `backend/src/modules/notificaciones/notificaciones.service.ts`; siempre se asignan al `id_usuario` destinatario. Para eventos operativos como postulaciones, cierre/reactivacion de ofertas y activacion/desactivacion de cuentas, la deduplicacion bloquea solo si una notificacion equivalente por `id_usuario + titulo + mensaje` fue creada en los ultimos 30 segundos y sigue siendo la ultima notificacion del usuario; si hubo un evento intermedio, el mismo texto puede volver a notificarse como evento legitimo. La ventana se calcula en MySQL con `DATE_SUB(NOW(), INTERVAL ? SECOND)` y la decision se serializa con `GET_LOCK` para proteger dobles peticiones concurrentes. Para encuesta disponible, la deduplicacion usa la encuesta vigente como clave de evento: el mensaje incluye `Referencia: <id_encuesta>` y se bloquea solo si ya existe esa misma notificacion de encuesta, permitiendo una nueva disponibilidad legitima aunque ocurra el mismo dia.
+- `GET /api/notificaciones` y `GET /api/notificaciones/unread-count` siempre usan `res.locals.auth.id_usuario`; no aceptan ids enviados por cliente para listar o contar. Los filtros de notificaciones aceptan `Todas`, `Leidas/Leídas` y `No leidas/No leídas`, y el listado devuelve `leido` normalizado como `0` o `1`.
+- La pantalla frontend de Notificaciones no usa datos mock como fallback cuando `useApi=true`; si el endpoint falla, no sustituye la respuesta por otro estado local. El contador del sidebar y el listado se refrescan desde los mismos endpoints reales despues de marcar una o todas como leidas.
 - Las acciones admin cubiertas por Fase A usan escrituras reales; acciones fuera de Fase A, como exportaciones/reportes pendientes, siguen mostrando aviso hasta una fase aprobada.
 - El badge rojo del menu de notificaciones usa el contador real de no leidas y se oculta cuando el contador es 0.
 - Los errores SQL `SIGNAL` se traducen a HTTP 422, duplicados a 409 e integridad referencial a 409.

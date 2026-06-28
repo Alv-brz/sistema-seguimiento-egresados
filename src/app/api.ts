@@ -153,7 +153,7 @@ export type ApiNotificacion = {
   id_usuario: number;
   titulo: string;
   mensaje: string;
-  leido: boolean | number;
+  leido: boolean | number | string;
   fecha_envio: string;
 };
 

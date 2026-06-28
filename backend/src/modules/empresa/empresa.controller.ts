@@ -6,7 +6,9 @@ import {
   createEmpresaOferta,
   deleteEmpresaOferta,
   getEmpresaDashboard,
+  getEmpresaOfertaNotificationTargets,
   getEmpresaPerfil,
+  getEmpresaPostulacionNotificationTarget,
   listEmpresaOfertas,
   listEmpresaPostulaciones,
   updateEmpresaOferta,
@@ -18,6 +20,7 @@ import {
   type PostulacionEstado,
 } from "./empresa.service.js";
 import type { ResultSetHeader } from "mysql2";
+import { notifyOfertaEstado, notifyPostulacionEstado } from "../notificaciones/notificaciones.service.js";
 
 function getAuthEmpresaId(res: Response): number | null {
   const auth = res.locals.auth;
@@ -233,6 +236,15 @@ export const empresaController = {
       return;
     }
 
+    const targets = await getEmpresaOfertaNotificationTargets(idEmpresa, idOferta);
+    if (targets.titulo && targets.idEgresados.length > 0) {
+      await notifyOfertaEstado({
+        idEgresados: targets.idEgresados,
+        tituloOferta: targets.titulo,
+        estado: "Cerrada",
+      });
+    }
+
     res.json({ ok: true });
   }),
 
@@ -257,6 +269,15 @@ export const empresaController = {
     if (result.affectedRows === 0) {
       res.status(404).json({ ok: false, error: "Oferta no encontrada para la empresa autenticada." });
       return;
+    }
+
+    const targets = await getEmpresaOfertaNotificationTargets(idEmpresa, idOferta);
+    if (targets.titulo && targets.idEgresados.length > 0) {
+      await notifyOfertaEstado({
+        idEgresados: targets.idEgresados,
+        tituloOferta: targets.titulo,
+        estado,
+      });
     }
 
     res.json({ ok: true });
@@ -313,6 +334,15 @@ export const empresaController = {
     if (result.affectedRows === 0) {
       res.status(404).json({ ok: false, error: "Postulación no encontrada para la empresa autenticada." });
       return;
+    }
+
+    const target = await getEmpresaPostulacionNotificationTarget(idEmpresa, idPostulacion);
+    if (target) {
+      await notifyPostulacionEstado({
+        idEgresado: target.id_egresado,
+        tituloOferta: target.titulo,
+        estado,
+      });
     }
 
     res.json({ ok: true });

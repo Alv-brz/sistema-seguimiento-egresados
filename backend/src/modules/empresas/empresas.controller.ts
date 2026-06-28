@@ -3,13 +3,14 @@ import type { ResultSetHeader } from "mysql2";
 import { asyncHandler } from "../../middleware/errorHandler.js";
 import {
   createEmpresa,
-  deleteEmpresa,
   listEmpresas,
   updateEmpresa,
   updateEmpresaEstado,
   type AdminEmpresaInput,
 } from "./empresas.service.js";
 import { getExactFilter, getPagination, getStringFilter } from "../../utils/pagination.js";
+import { registerAuditEvent } from "../auditoria/auditoria.service.js";
+import { notifyCuentaEstado } from "../notificaciones/notificaciones.service.js";
 
 function badRequest(res: Response, error: string) {
   res.status(400).json({ ok: false, error });
@@ -113,13 +114,10 @@ export const empresasController = {
       return;
     }
 
-    const result = (await deleteEmpresa(id)) as ResultSetHeader;
-    if (result.affectedRows === 0) {
-      res.status(404).json({ ok: false, error: "Empresa no encontrada." });
-      return;
-    }
-
-    res.json({ ok: true });
+    res.status(405).json({
+      ok: false,
+      error: "Las empresas no se eliminan físicamente. Use Desactivar para conservar ofertas e historial.",
+    });
   }),
 
   updateEstado: asyncHandler(async (req: Request, res: Response) => {
@@ -139,6 +137,15 @@ export const empresasController = {
       res.status(404).json({ ok: false, error: "Empresa no encontrada." });
       return;
     }
+
+    await registerAuditEvent({
+      tabla: "empresa",
+      accion: "UPDATE",
+      idRegistro: id,
+      descripcion: `${estado === "Activo" ? "Reactivación" : "Desactivación"} de cuenta de empresa`,
+      usuario: `Administrador #${res.locals.auth?.id_usuario ?? "N/D"}`,
+    });
+    await notifyCuentaEstado({ idUsuario: id, estado });
 
     res.json({ ok: true });
   }),
