@@ -33,6 +33,9 @@ Estado aprobado al 2026-06-26:
 - Eventos automaticos y notificaciones del sistema implementados: postulaciones, cierre/reactivacion de ofertas, desactivacion/reactivacion de cuentas y disponibilidad de encuestas generan notificaciones reales sin WebSockets y con deduplicacion.
 - Flujo de lectura y visualizacion de notificaciones corregido: la app valida la sesion guardada con `/api/auth/me`, el modulo Notificaciones no muestra fallback mock cuando hay API real, `GET /api/notificaciones` y `unread-count` se verificaron por JWT para admin/empresa/egresado, y los filtros de leidas/no leidas funcionan con o sin tilde.
 - Estrategia de deduplicacion de notificaciones automaticas corregida: los eventos operativos ya no quedan bloqueados por 24 horas ni por texto repetido con eventos intermedios; solo se bloquea una notificacion equivalente reciente si sigue siendo la ultima del usuario, con bloqueo concurrente por `GET_LOCK`. Encuesta disponible deduplica por referencia de `id_encuesta`, sin impedir disponibilidades posteriores del mismo dia.
+- QA Final iniciado y ejecutado sobre los tres roles: se corrigieron detalles pequenos de UI/UX sin modificar `Database/`, sin crear tablas y sin reescribir modulos.
+- Modulo administrativo `Evidencias SQL` implementado para demostrar vistas, funciones, procedimientos, auditoria, triggers SIGNAL y roles MySQL con endpoints controlados solo para administrador.
+- Objetos SQL avanzados integrados en flujos reales seguros: vistas en listados/reportes, funciones en KPIs y nombres calculados, y procedimientos no destructivos con `CALL` dentro de operaciones existentes.
 
 ## Fases Implementadas
 
@@ -788,6 +791,121 @@ Verificacion realizada:
 - Prueba HTTP real: encuesta con `tiempo_entre_encuestas_meses = 0`; recargas simultaneas de contador/listado no duplicaron la disponibilidad vigente y una encuesta posterior genero una segunda notificacion valida (`antes=1`, `despues=2`).
 - Prueba HTTP real: contador, listado, marcar una notificacion como leida y marcar todas como leidas siguieron funcionando (`antes_leer=13`, `tras_una=12`, `tras_todas=0`).
 
+### Fase 19 - QA Final
+
+Estado: implementada en esta sesion.
+
+Incluye:
+
+- Revision QA de roles Administrador, Empresa y Egresado.
+- Revision de login, cierre de sesion, restauracion de sesion con `GET /api/auth/me`, dashboards, reportes, configuracion, egresados, empresas, ofertas, postulaciones, historial laboral, encuesta, notificaciones, auditoria y perfil.
+- Correccion de recuperacion de contrasena visual: ya no muestra un exito falso ni texto tecnico `fecha_expiracion`; informa que la recuperacion automatica aun no esta habilitada.
+- Correccion de enlace roto en pagina web de empresas: ya no usa `href="#"`; abre la URL real normalizada con `https://` cuando corresponde.
+- Correccion de datos mock visibles en navegacion: sidebar y topbar muestran el `nombre_usuario` real de la sesion autenticada y sus iniciales.
+- Correccion de titulo superior para Empresa en `Mis Ofertas`, que internamente reutiliza `admin-ofertas`.
+- Correccion de botones dentro de formularios que no debian enviar el formulario: estado de Configuracion y Foto visual en Mi Perfil ahora usan `type="button"`.
+- No se implementaron nuevas funcionalidades, no se reescribieron modulos y no se modifico el diseno general.
+- No se modifico `Database/`, no se crearon tablas y no se tocaron procedimientos, funciones, triggers ni scripts SQL.
+
+Archivos modificados:
+
+- `src/app/App.tsx`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+Verificacion realizada:
+
+- `npm.cmd run build` en `backend/`: correcto.
+- `npm.cmd run build` en frontend: correcto fuera del sandbox por restriccion de acceso en OneDrive; Vite solo reporto advertencia de chunk grande.
+- `rg -n '\\b(alert|confirm|prompt)\\s*\\(' src backend/src -S`: sin llamadas nativas; la unica coincidencia relacionada es el componente `Alert`.
+- `git status --short -- Database`: sin cambios.
+- Prueba HTTP real con JWT admin: login, `GET /api/auth/me`, dashboard, reportes con filtros, configuracion, auditoria, encuestas, notificaciones, crear/editar/desactivar/reactivar egresado, crear/editar/desactivar/reactivar empresa, crear/editar/cerrar/eliminar oferta admin sin postulaciones.
+- Prueba HTTP real con JWT empresa: login, `GET /api/auth/me`, dashboard, perfil, crear/listar oferta propia, recibir postulacion, cambiar estado de postulacion, cerrar/reactivar oferta, bloqueo de eliminacion por postulaciones.
+- Prueba HTTP real con JWT egresado: login, `GET /api/auth/me`, dashboard, perfil, bolsa laboral, postular, bloqueo de postulacion duplicada, listar postulaciones, crear/editar/eliminar historial laboral, registrar encuesta, listar contador/notificaciones, marcar una y todas como leidas.
+- Prueba HTTP real de permisos cruzados: empresa no accede a `/api/egresados` y egresado no accede a `/api/empresa/dashboard` (`403`).
+
+### Fase 20 - Evidencias SQL Académicas
+
+Estado: implementada en esta sesion, pendiente de aprobacion del usuario.
+
+Incluye:
+
+- Matriz de cumplimiento construida con los objetos reales existentes en `Database/`: 10 vistas, 10 funciones, 15 procedimientos, 10 triggers de auditoria, 15 triggers SIGNAL y 3 roles MySQL.
+- Backend `admin-sql-evidencias` protegido con `requireAuth` y `requireRole("admin")`.
+- Endpoints controlados para consultar vistas, ejecutar funciones y procedimientos por lista blanca, mostrar auditoria reciente, generar demo de auditoria y provocar errores SIGNAL.
+- Procedimientos de escritura, pruebas de auditoria y pruebas SIGNAL ejecutados con datos temporales dentro de transacciones revertidas con `ROLLBACK`.
+- Pantalla admin `Evidencias SQL` agregada al menu, con secciones Vistas, Funciones, Procedimientos, Auditoria, SIGNAL y Usuarios y permisos.
+- Separacion visible de funciones numericas y de texto; procedimientos marcados por JOIN, 2+ parametros y modo seguro.
+- Explicacion visual de roles MySQL academicos frente a autorizacion operativa del aplicativo mediante JWT y `requireRole`.
+- No se modifico `Database/`, no se crearon tablas y no se alteraron procedimientos, funciones, vistas, triggers ni scripts SQL.
+
+Archivos creados:
+
+- `backend/src/modules/admin-sql-evidencias/admin-sql-evidencias.routes.ts`
+- `backend/src/modules/admin-sql-evidencias/admin-sql-evidencias.controller.ts`
+- `backend/src/modules/admin-sql-evidencias/admin-sql-evidencias.service.ts`
+
+Archivos modificados:
+
+- `backend/src/app.ts`
+- `backend/src/middleware/errorHandler.ts`
+- `src/app/api.ts`
+- `src/app/App.tsx`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+Verificacion realizada:
+
+- `npm.cmd run build` en `backend/`: correcto.
+- `npm.cmd run build` en frontend: correcto fuera del sandbox por restriccion de acceso en OneDrive; Vite solo reporto advertencia de chunk grande.
+- Prueba HTTP real con JWT admin: matriz `GET /api/admin/sql-evidencias`, 10 vistas, 10 funciones, 15 procedimientos, demo de auditoria y 15 triggers SIGNAL.
+- Prueba HTTP real: empresa y egresado no acceden a `/api/admin/sql-evidencias` y reciben `403`.
+- `git status --short -- Database`: sin cambios.
+
+### Fase 21 - Integración Operativa de Objetos SQL Avanzados
+
+Estado: implementada en esta sesion, pendiente de aprobacion del usuario.
+
+Incluye:
+
+- Integración operativa de las 10 vistas existentes en endpoints reales de listados, dashboards y reportes sin modificar `Database/`.
+- Integración operativa de las 10 funciones SQL en KPIs, nombres calculados y reportes.
+- Integración con `CALL` de procedimientos almacenados seguros en flujos reales.
+- Mantenimiento de validaciones, propiedad por JWT, notificaciones automáticas, auditoría, paginación y filtros existentes.
+- Procedimientos incompletos frente a formularios actuales se usan como base segura y luego se complementan con SQL parametrizado dentro de la misma transacción.
+- `Evidencias SQL` actualizado para mostrar solo objetos SQL del flujo operativo real, con endpoint y archivo backend asociado.
+- Confirmación funcional de triggers de auditoría y SIGNAL por operaciones reales y pruebas controladas.
+- No se modificó `Database/`, no se crearon tablas y no se alteraron vistas, funciones, procedimientos, triggers ni scripts SQL.
+
+Archivos modificados:
+
+- `backend/src/modules/admin-dashboard/admin-dashboard.service.ts`
+- `backend/src/modules/egresado/egresado.service.ts`
+- `backend/src/modules/egresados/egresados.service.ts`
+- `backend/src/modules/empresa/empresa.service.ts`
+- `backend/src/modules/empresas/empresas.service.ts`
+- `backend/src/modules/encuestas/encuestas.service.ts`
+- `backend/src/modules/ofertas/ofertas.service.ts`
+- `backend/src/modules/admin-sql-evidencias/admin-sql-evidencias.service.ts`
+- `src/app/api.ts`
+- `src/app/App.tsx`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+Verificación realizada:
+
+- `npm.cmd run build` en `backend/`: correcto.
+- `npm.cmd run build` en frontend: correcto; Vite solo reportó advertencia de chunk grande.
+- Prueba HTTP real con JWT admin: dashboard, reportes con filtros, egresados, ofertas, encuestas y Evidencias SQL.
+- Prueba HTTP real con JWT empresa: dashboard con `sqlReports`, listado de ofertas, crear/editar/cerrar/reactivar oferta propia y cambiar estado de postulación.
+- Prueba HTTP real con JWT egresado: dashboard, bolsa laboral, postulación y registro de encuesta.
+- Prueba HTTP real: crear/editar empresa y crear/editar egresado desde administrador.
+- Prueba HTTP real: notificación automática al egresado tras cambio de estado de postulación.
+- Prueba HTTP real: auditoría consultada después de operaciones reales.
+- Prueba HTTP real: 15 triggers SIGNAL provocados desde Evidencias SQL con mensajes capturados correctamente.
+- Prueba HTTP real: empresa y egresado reciben `403` al acceder a `/api/admin/sql-evidencias`.
+- `git status --short -- Database`: sin cambios.
+
 ## Funcionalidades Terminadas
 
 - Aplicacion frontend arranca con Vite.
@@ -857,10 +975,15 @@ Verificacion realizada:
 - Deduplicacion de notificaciones automaticas equivalentes para evitar repetidos inmediatos sin bloquear eventos legitimos posteriores.
 - Lectura y visualizacion de notificaciones corregida para administrador, empresa y egresado.
 - Validacion de sesion local contra `GET /api/auth/me` al iniciar la app.
+- QA Final de interfaz y endpoints principales ejecutado para los tres roles.
+- Revision final UTF-8 ejecutada en backend, frontend y datos visibles de los tres roles; no hay caracteres corruptos pendientes ni problema general de codificacion detectado.
+- Modulo administrativo de Evidencias SQL implementado para el rol administrador.
+- Vistas, funciones y procedimientos SQL avanzados integrados operativamente en endpoints reales seguros.
 
 ## Funcionalidades Pendientes
 
 - Exportacion real de reportes a PDF/Excel.
+- Recuperacion automatica de contrasena con envio real de correo/token.
 - Validacion de entrada por modulo.
 - Proteccion de permisos por propietario del recurso para modulos pendientes fuera de Empresa y Egresado.
 - Manejo formal de variables `.env` y documentacion de ejemplo si falta.
@@ -868,13 +991,66 @@ Verificacion realizada:
 
 ## Fases Pendientes Recomendadas
 
-### Fase 19 - Modularizacion Frontend
+### Fase 22 - Modularizacion Frontend
 
 Objetivo:
 
 - Extraer pantallas y datos de `src/app/App.tsx` cuando el acoplamiento empiece a impedir avances.
 - Mantener diseno visual intacto.
 - No hacer esta fase antes de integrar datos reales suficientes.
+
+## Estado Actual
+
+Fecha: 2026-06-28.
+
+Fase: integracion final de objetos SQL avanzados en flujos reales.
+
+Estado:
+
+- Se leyeron `AI_CONTEXT.md`, `PROJECT_STATUS.md`, todos los archivos de `Database/` y `backend/src/modules/admin-sql-evidencias` antes de modificar.
+- Los procedimientos seguros `sp_cambiar_estado_egresado_seguro` y `sp_cambiar_estado_empresa_seguro` ya existen en MySQL y se usan desde endpoints reales.
+- Los endpoints `PATCH /api/egresados/:id/estado` y `PATCH /api/empresas/:id/estado` ahora usan `CALL` a los procedimientos seguros.
+- Los triggers `tr_estado_usuario_update_signal`, `tr_aud_usuario_estado_update` y `tr_aud_historial_laboral_delete` ya existen en MySQL.
+- `Evidencias SQL` muestra solo objetos SQL conectados a flujos operativos reales.
+- La matriz final queda: Vistas 10/10, Funciones 10/10, Procedimientos 15/15, Auditoria 10/10, SIGNAL 15/15 y Roles 3/3.
+- `Database/Entrega_Limpia_SQL/` contiene la version final limpia en scripts `01` a `06` y `README.md`.
+- Scripts antiguos de `Database/` no fueron modificados.
+
+Verificacion:
+
+- `npm.cmd run build` en `backend`: exitoso.
+- `npm.cmd run build` en frontend raiz: exitoso.
+- API health responde con DB conectada.
+- Login admin y empresa verificado; login egresado verificado con credencial activa alternativa `florencia.montesinos46177`.
+- `GET /api/admin/sql-evidencias` con admin responde matriz esperada: Vistas 10/10, Funciones 10/10, Procedimientos 15/15, Auditoria 10/10, SIGNAL 15/15, Roles 3/3.
+- Empresa y egresado reciben 403 al acceder a `/api/admin/sql-evidencias`.
+- `PATCH /api/egresados/:id/estado` probado y restaurado con egresado real.
+- `PATCH /api/empresas/:id/estado` probado y restaurado con empresa real.
+- `GET /api/admin/dashboard` responde KPIs reales.
+- Verificacion de existencia en MySQL confirmada por el usuario con `SHOW PROCEDURE STATUS` y `SHOW TRIGGERS` para los procedimientos y triggers finales.
+- Prueba HTTP real de Evidencias SQL completada: 10 vistas consultadas, 10 funciones ejecutadas, 15 procedimientos ejecutados, 15 triggers SIGNAL provocados, prueba de auditoria con 10 triggers visibles y roles 3/3.
+- Prueba HTTP real de endpoints operativos: `PATCH /api/egresados/:id/estado` y `PATCH /api/empresas/:id/estado` ejecutaron y restauraron registros reales usando los procedimientos seguros.
+- Consulta directa a `information_schema` confirmo existencia de `sp_cambiar_estado_egresado_seguro`, `sp_cambiar_estado_empresa_seguro`, `tr_estado_usuario_update_signal`, `tr_aud_usuario_estado_update` y `tr_aud_historial_laboral_delete`.
+
+Archivos modificados/creados:
+
+- `backend/src/modules/egresados/egresados.service.ts`
+- `backend/src/modules/empresas/empresas.service.ts`
+- `backend/src/modules/admin-sql-evidencias/admin-sql-evidencias.service.ts`
+- `Database/IntegracionObjetosSQL_Final.sql`
+- `Database/Entrega_Limpia_SQL/01_vistas_usadas.sql`
+- `Database/Entrega_Limpia_SQL/02_funciones_usadas.sql`
+- `Database/Entrega_Limpia_SQL/03_procedimientos_usados.sql`
+- `Database/Entrega_Limpia_SQL/04_triggers_auditoria_usados.sql`
+- `Database/Entrega_Limpia_SQL/05_triggers_signal_usados.sql`
+- `Database/Entrega_Limpia_SQL/06_usuarios_permisos.sql`
+- `Database/Entrega_Limpia_SQL/README.md`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+Pendiente antes de aprobar entrega final:
+
+- Sin bloqueo SQL pendiente para Evidencias SQL.
 
 ## Ultimo Estado Aprobado
 
@@ -901,9 +1077,12 @@ Estado:
 - Listados admin, empresa y egresado principales tienen paginacion, busqueda y filtros reales donde corresponde.
 - Reportes y Estadisticas actualiza KPIs y graficos al aplicar filtros.
 - Notificaciones se listan y cuentan desde endpoints reales por `id_usuario` autenticado; filtros, contador y marcado como leida quedan validados para admin, empresa y egresado.
+- QA Final corrigio detalles pequenos y valido HTTP real para CRUD/lecturas/permisos de los tres roles.
+- Revision UTF-8 corrigio registros puntuales de prueba con caracteres reemplazados y valido por HTTP real que dashboard, listados, perfiles, encuestas, auditoria, reportes/configuracion y notificaciones no devuelven caracteres corruptos.
+- Notificaciones automaticas revalidadas por HTTP real con JWT: postulaciones, cierre/reactivacion de ofertas, desactivacion/reactivacion de cuentas, encuesta disponible, contador, marcar una y marcar todas como leidas.
 - Acciones de escritura/exportacion no implementadas fuera de Empresa, Egresado y Administrador aprobado muestran aviso informativo.
 - Base de datos intacta.
-- Proxima fase recomendada: modularizacion frontend o exportacion real de reportes, si el usuario lo autoriza.
+- Proxima fase recomendada: recuperacion automatica de contrasena o exportacion real de reportes, si el usuario lo autoriza.
 
 ## Archivos Importantes por Area
 

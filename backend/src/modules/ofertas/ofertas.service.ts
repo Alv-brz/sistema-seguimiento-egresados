@@ -35,40 +35,48 @@ export async function createOferta(idEmpresa: number, input: AdminOfertaInput) {
     return { ok: false as const, reason: "empresa-invalida" };
   }
 
-  const [result] = await pool.execute(
-    `INSERT INTO oferta_laboral(
-       titulo,
-       descripcion,
-       puesto,
-       area,
-       ubicacion,
-       modalidad,
-       tipo_contrato,
-       salario,
-       requisitos,
-       fecha_publicacion,
-       fecha_cierre,
-       estado_oferta,
-       id_empresa
-     )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, ?, ?)`,
-    [
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query("CALL sp_publicar_oferta(?, ?, ?, ?)", [
       input.titulo,
-      input.descripcion,
-      input.puesto,
-      input.area,
-      input.ubicacion,
-      input.modalidad,
-      input.tipo_contrato,
-      input.salario,
-      input.requisitos,
-      input.fecha_cierre,
-      input.estado_oferta,
       idEmpresa,
-    ]
-  );
-
-  return { ok: true as const, result };
+      input.puesto,
+      input.salario,
+    ]);
+    const [idRows] = await connection.query("SELECT LAST_INSERT_ID() AS id_oferta");
+    const idOferta = Number((idRows as { id_oferta: number }[])[0]?.id_oferta ?? 0);
+    const [result] = await connection.execute(
+      `UPDATE oferta_laboral
+       SET descripcion = ?,
+           area = ?,
+           ubicacion = ?,
+           modalidad = ?,
+           tipo_contrato = ?,
+           requisitos = ?,
+           fecha_cierre = ?,
+           estado_oferta = ?
+       WHERE id_oferta = ?`,
+      [
+        input.descripcion,
+        input.area,
+        input.ubicacion,
+        input.modalidad,
+        input.tipo_contrato,
+        input.requisitos,
+        input.fecha_cierre,
+        input.estado_oferta,
+        idOferta,
+      ]
+    );
+    await connection.commit();
+    return { ok: true as const, result: { ...(result as object), insertId: idOferta } };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function listOfertas(
@@ -99,6 +107,7 @@ export async function listOfertas(
   const [countRows] = await pool.query(
     `SELECT COUNT(*) AS total
      FROM oferta_laboral o
+     INNER JOIN vw_empresa_ofertas veo ON veo.id_oferta = o.id_oferta
      INNER JOIN empresa em ON em.id_usuario = o.id_empresa
      ${whereSql}`,
     params
@@ -120,8 +129,9 @@ export async function listOfertas(
        o.fecha_cierre,
        o.estado_oferta,
        o.id_empresa,
-       em.razon_social AS empresa
+       fn_nombre_empresa(o.id_empresa) AS empresa
      FROM oferta_laboral o
+     INNER JOIN vw_empresa_ofertas veo ON veo.id_oferta = o.id_oferta
      INNER JOIN empresa em ON em.id_usuario = o.id_empresa
      ${whereSql}
      ORDER BY o.fecha_publicacion DESC, o.id_oferta DESC
@@ -138,41 +148,68 @@ export async function listOfertas(
 }
 
 export async function updateOferta(idOferta: number, input: AdminOfertaInput) {
-  const [result] = await pool.execute(
-    `UPDATE oferta_laboral
-     SET
-       titulo = ?,
-       descripcion = ?,
-       puesto = ?,
-       area = ?,
-       ubicacion = ?,
-       modalidad = ?,
-       tipo_contrato = ?,
-       salario = ?,
-       requisitos = ?,
-       fecha_cierre = ?,
-       estado_oferta = ?
-     WHERE id_oferta = ?`,
-    [
-      input.titulo,
-      input.descripcion,
-      input.puesto,
-      input.area,
-      input.ubicacion,
-      input.modalidad,
-      input.tipo_contrato,
-      input.salario,
-      input.requisitos,
-      input.fecha_cierre,
-      input.estado_oferta,
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query("CALL sp_actualizar_oferta(?, ?, ?)", [
       idOferta,
-    ]
-  );
-
-  return result;
+      input.salario,
+      input.estado_oferta,
+    ]);
+    const [result] = await connection.execute(
+      `UPDATE oferta_laboral
+       SET titulo = ?,
+           descripcion = ?,
+           puesto = ?,
+           area = ?,
+           ubicacion = ?,
+           modalidad = ?,
+           tipo_contrato = ?,
+           requisitos = ?,
+           fecha_cierre = ?
+       WHERE id_oferta = ?`,
+      [
+        input.titulo,
+        input.descripcion,
+        input.puesto,
+        input.area,
+        input.ubicacion,
+        input.modalidad,
+        input.tipo_contrato,
+        input.requisitos,
+        input.fecha_cierre,
+        idOferta,
+      ]
+    );
+    await connection.commit();
+    return result;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function updateOfertaEstado(idOferta: number, estado: "Activa" | "Cerrada") {
+  if (estado === "Cerrada") {
+    const [ofertaRows] = await pool.execute(
+      "SELECT id_empresa FROM oferta_laboral WHERE id_oferta = ? LIMIT 1",
+      [idOferta]
+    );
+    const idEmpresa = Number((ofertaRows as { id_empresa: number }[])[0]?.id_empresa ?? 0);
+    if (!idEmpresa) return { affectedRows: 0 };
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.query("CALL sp_cerrar_oferta(?, ?)", [idOferta, idEmpresa]);
+      const [rows] = await connection.query("SELECT ROW_COUNT() AS affectedRows");
+      return { affectedRows: Number((rows as { affectedRows: number }[])[0]?.affectedRows ?? 0) };
+    } finally {
+      connection.release();
+    }
+  }
+
   const [result] = await pool.execute(
     "UPDATE oferta_laboral SET estado_oferta = ? WHERE id_oferta = ?",
     [estado, idOferta]

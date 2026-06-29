@@ -14,9 +14,9 @@ export async function listEncuestas(
   const params: unknown[] = [];
 
   if (filters.search) {
-    where.push("(e.nombre_egresado LIKE ? OR e.apellidos_egresado LIKE ? OR es.nombre_empresa_actual LIKE ? OR es.cargo_actual LIKE ? OR es.area_trabajo LIKE ?)");
+    where.push("(ve.egresado LIKE ? OR es.nombre_empresa_actual LIKE ? OR es.cargo_actual LIKE ? OR es.area_trabajo LIKE ?)");
     const q = `%${filters.search}%`;
-    params.push(q, q, q, q, q);
+    params.push(q, q, q, q);
   }
 
   if (filters.estadoLaboral) {
@@ -30,6 +30,7 @@ export async function listEncuestas(
     `SELECT COUNT(*) AS total
      FROM encuesta_seguimiento es
      INNER JOIN seguimiento_egresado se ON se.id_encuesta = es.id_encuesta
+     INNER JOIN vw_encuestas_egresados ve ON ve.id_seguimiento = se.id_seguimiento
      INNER JOIN egresado e ON e.id_usuario = se.id_egresado
      ${whereSql}`,
     params
@@ -48,10 +49,11 @@ export async function listEncuestas(
        es.satisfaccion_profesional,
        es.tiempo_conseguir_empleo,
        es.observaciones,
-       CONCAT(e.nombre_egresado, ' ', e.apellidos_egresado) AS egresado,
+       fn_nombre_completo(se.id_egresado) AS egresado,
        se.fecha_asociacion
      FROM encuesta_seguimiento es
      INNER JOIN seguimiento_egresado se ON se.id_encuesta = es.id_encuesta
+     INNER JOIN vw_encuestas_egresados ve ON ve.id_seguimiento = se.id_seguimiento
      INNER JOIN egresado e ON e.id_usuario = se.id_egresado
      ${whereSql}
      ORDER BY es.fecha_registro DESC, es.id_encuesta DESC

@@ -18,6 +18,13 @@ export function errorHandler(
   // next se declara para que Express reconozca el middleware de error (4 args).
   _next: NextFunction
 ) {
+  if (err instanceof Error && "status" in err) {
+    const status = Number((err as Error & { status?: number }).status);
+    if (status >= 400 && status < 500) {
+      return res.status(status).json({ ok: false, error: err.message });
+    }
+  }
+
   // Errores de MySQL (p.ej. SIGNAL SQLSTATE '45000' de los triggers).
   if (typeof err === "object" && err !== null && "code" in err) {
     const e = err as { code?: string; errno?: number; sqlMessage?: string };

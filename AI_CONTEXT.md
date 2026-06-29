@@ -171,6 +171,14 @@ El backend es una API REST modular bajo `/api`:
 - `PUT /api/egresado/historial/:id`: edita historial laboral propio.
 - `DELETE /api/egresado/historial/:id`: elimina historial laboral propio.
 - `POST /api/egresado/encuesta`: registra encuesta de seguimiento y la asocia al egresado autenticado.
+- `GET /api/admin/sql-evidencias`: devuelve la matriz de cumplimiento y metadatos de vistas, funciones, procedimientos, triggers y roles MySQL existentes en `Database/`.
+- `GET /api/admin/sql-evidencias/vistas/:name`: consulta resultados reales de una vista permitida por lista blanca.
+- `POST /api/admin/sql-evidencias/funciones/:name/run`: ejecuta una función SQL permitida con parámetros de prueba controlados.
+- `POST /api/admin/sql-evidencias/procedimientos/:name/run`: ejecuta un procedimiento permitido; las escrituras usan datos temporales dentro de transacciones con `ROLLBACK`.
+- `GET /api/admin/sql-evidencias/auditoria/reciente`: muestra registros recientes de `auditoria`.
+- `POST /api/admin/sql-evidencias/auditoria/probar`: genera evidencia temporal de auditoría para los triggers operativos dentro de una transacción revertida.
+- `POST /api/admin/sql-evidencias/signal/:name/test`: provoca de forma controlada un trigger `SIGNAL` permitido y devuelve su mensaje.
+- `GET /api/admin/sql-evidencias/roles`: muestra los 3 roles MySQL definidos en `Database/Usuarios.sql` y explica que el aplicativo usa JWT + `requireRole`.
 
 Los endpoints de lectura inicial estan implementados para pantallas de administrador, empresa y egresado. El CRUD de Empresa ya esta cerrado para publicar, editar, cerrar, reactivar y eliminar ofertas propias, cambiar estado de postulaciones propias y actualizar perfil propio. El CRUD de Egresado ya esta cerrado para postulaciones, perfil, historial laboral, encuesta de seguimiento y notificaciones. CRUD Administrador Fase B esta implementado para egresados, empresas, ofertas, encuestas historicas y notificaciones administrables. La gestion de encuestas de administrador es solo lectura/detalle: las encuestas respondidas forman parte del historial del egresado y no se eliminan. La fase de eventos automaticos y notificaciones del sistema esta implementada: cambios de postulacion, cierre/reactivacion de ofertas, desactivacion/reactivacion de cuentas y disponibilidad de encuesta generan notificaciones reales en `notificacion`, con deduplicacion por usuario, titulo y mensaje. El flujo de lectura de notificaciones fue estabilizado para validar la sesion guardada con `/api/auth/me`, listar solo el usuario autenticado, no mostrar fallback mock cuando existe API real, normalizar `leido` y aceptar filtros `leidas/no leidas` con o sin tilde.
 
@@ -325,7 +333,8 @@ Procedimientos:
 - `sp_actualizar_empresa`
 - `sp_registrar_egresado`
 - `sp_actualizar_egresado`
-- `sp_eliminar_egresado`
+- `sp_cambiar_estado_egresado_seguro`
+- `sp_cambiar_estado_empresa_seguro`
 - `sp_publicar_oferta`
 - `sp_actualizar_oferta`
 - `sp_cerrar_oferta`
@@ -335,7 +344,6 @@ Procedimientos:
 - `sp_asociar_encuesta_egresado`
 - `sp_postulaciones_por_empresa`
 - `sp_egresados_por_carrera`
-- `sp_ofertas_por_facultad`
 
 ## Modulos Existentes
 
@@ -374,6 +382,7 @@ Backend implementado:
 - `encuestas`: listado admin de encuestas asociadas a egresados.
 - `auditoria`: lectura de tabla `auditoria`.
 - `notificaciones`: lectura de notificaciones y contador real de no leidas del usuario autenticado.
+- `admin-sql-evidencias`: matriz y panel académico de demostración SQL solo para administrador; no expone SQL libre y usa listas blancas.
 - `empresa`: dashboard, ofertas propias, postulaciones recibidas y perfil de la empresa autenticada.
 - `egresado`: dashboard, bolsa laboral, postulaciones propias, perfil, historial, ultima encuesta y escrituras propias del egresado autenticado.
 - `utils/pagination`: normalizacion de `page`, `pageSize` y filtros de query.
@@ -482,9 +491,19 @@ Base de datos:
 - Las notificaciones automaticas se crean desde backend con helpers en `backend/src/modules/notificaciones/notificaciones.service.ts`; siempre se asignan al `id_usuario` destinatario. Para eventos operativos como postulaciones, cierre/reactivacion de ofertas y activacion/desactivacion de cuentas, la deduplicacion bloquea solo si una notificacion equivalente por `id_usuario + titulo + mensaje` fue creada en los ultimos 30 segundos y sigue siendo la ultima notificacion del usuario; si hubo un evento intermedio, el mismo texto puede volver a notificarse como evento legitimo. La ventana se calcula en MySQL con `DATE_SUB(NOW(), INTERVAL ? SECOND)` y la decision se serializa con `GET_LOCK` para proteger dobles peticiones concurrentes. Para encuesta disponible, la deduplicacion usa la encuesta vigente como clave de evento: el mensaje incluye `Referencia: <id_encuesta>` y se bloquea solo si ya existe esa misma notificacion de encuesta, permitiendo una nueva disponibilidad legitima aunque ocurra el mismo dia.
 - `GET /api/notificaciones` y `GET /api/notificaciones/unread-count` siempre usan `res.locals.auth.id_usuario`; no aceptan ids enviados por cliente para listar o contar. Los filtros de notificaciones aceptan `Todas`, `Leidas/Leídas` y `No leidas/No leídas`, y el listado devuelve `leido` normalizado como `0` o `1`.
 - La pantalla frontend de Notificaciones no usa datos mock como fallback cuando `useApi=true`; si el endpoint falla, no sustituye la respuesta por otro estado local. El contador del sidebar y el listado se refrescan desde los mismos endpoints reales despues de marcar una o todas como leidas.
+- QA Final corrigio detalles pequenos de interfaz sin cambiar arquitectura: el sidebar/topbar muestran el `nombre_usuario` de la sesion real en vez de nombres demo fijos, el titulo superior de Empresa muestra `Mis Ofertas` cuando reutiliza la pantalla interna `admin-ofertas`, los enlaces de pagina web de empresas ya apuntan a una URL real y los botones visuales dentro de formularios usan `type="button"` para no disparar guardados involuntarios.
+- La revision final UTF-8 confirmo que la BD trabaja con `utf8mb4` y que backend/frontend devuelven acentos correctamente por HTTP. No se encontro un problema general de encoding; los hallazgos fueron registros puntuales de prueba creados desde consola/PowerShell con caracteres reemplazados (`?` o `�`), corregidos directamente como datos usando valores Unicode correctos sin modificar scripts de `Database/`.
+- La pantalla de recuperacion de contrasena no tiene backend ni envio de correo implementado; por QA Final ya no simula exito ni muestra campos tecnicos como `fecha_expiracion`. Debe considerarse pendiente real si se exige recuperacion automatica antes de entrega.
 - Las acciones admin cubiertas por Fase A usan escrituras reales; acciones fuera de Fase A, como exportaciones/reportes pendientes, siguen mostrando aviso hasta una fase aprobada.
 - El badge rojo del menu de notificaciones usa el contador real de no leidas y se oculta cuando el contador es 0.
 - Los errores SQL `SIGNAL` se traducen a HTTP 422, duplicados a 409 e integridad referencial a 409.
+- El panel `Evidencias SQL` esta disponible solo para rol administrador. Usa endpoints controlados bajo `/api/admin/sql-evidencias`, consulta objetos reales definidos en `Database/`, no modifica scripts SQL, no crea tablas y no permite SQL arbitrario desde frontend.
+- Las pruebas de procedimientos de escritura, auditoria y SIGNAL usan datos temporales y transacciones revertidas con `ROLLBACK` para no dañar datos reales. La auditoria reciente se muestra desde la tabla `auditoria`.
+- Los objetos SQL avanzados ya no quedan solo en `Evidencias SQL`: vistas, funciones y procedimientos seguros se consumen tambien desde endpoints operativos. Las vistas alimentan listados/reportes (`egresados`, `ofertas`, `postulaciones`, `historial`, `encuestas`, `dashboard`). Las funciones alimentan KPIs y nombres calculados. Los procedimientos no destructivos se invocan con `CALL` en flujos reales y se complementan con SQL parametrizado cuando no cubren todos los campos actuales.
+- Procedimientos integrados con `CALL` en flujos reales y mostrados en `Evidencias SQL`: `sp_registrar_empresa`, `sp_actualizar_empresa`, `sp_registrar_egresado`, `sp_actualizar_egresado`, `sp_cambiar_estado_egresado_seguro`, `sp_cambiar_estado_empresa_seguro`, `sp_publicar_oferta`, `sp_actualizar_oferta`, `sp_cerrar_oferta`, `sp_registrar_postulacion`, `sp_cambiar_estado_postulacion`, `sp_registrar_encuesta`, `sp_asociar_encuesta_egresado`, `sp_postulaciones_por_empresa` y `sp_egresados_por_carrera`.
+- El modulo `Evidencias SQL` muestra unicamente objetos del flujo operativo real: 10 vistas, 10 funciones, 15 procedimientos, 10 triggers de auditoria, 15 triggers SIGNAL y 3 roles MySQL. Cada fila incluye nombre, tipo, endpoint, archivo backend y flujo real.
+- Los procedimientos seguros `sp_cambiar_estado_egresado_seguro` y `sp_cambiar_estado_empresa_seguro`, y los triggers `tr_estado_usuario_update_signal`, `tr_aud_usuario_estado_update` y `tr_aud_historial_laboral_delete`, ya existen en MySQL y se usan desde endpoints reales.
+- Scripts nuevos de integracion SQL: `Database/IntegracionObjetosSQL_Final.sql` y carpeta `Database/Entrega_Limpia_SQL/` con scripts limpios por categoria. Los scripts antiguos de `Database/` permanecen sin modificaciones.
 - `configuracion_sistema` es singleton con `id_configuracion = 1`; sus validaciones de correo, meses y estado dependen de triggers `SIGNAL`.
 - La UI no debe mostrar etiquetas tecnicas SQL, tipos de columna ni nombres internos como ayuda de usuario. Usar etiquetas amigables como Titulo, Descripcion, Puesto, Area, Ubicacion, Modalidad, Tipo de contrato, Salario, Requisitos, Fecha de cierre, Correo, Telefono, Direccion, DNI, Sexo, Facultad, Carrera y Estado.
 - Las ayudas visibles deben ser orientadas al usuario, por ejemplo maximos de caracteres, campo obligatorio/opcional, disponibilidad inmediata con `0` meses o validaciones de fecha.

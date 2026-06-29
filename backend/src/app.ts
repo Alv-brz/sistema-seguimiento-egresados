@@ -15,6 +15,7 @@ import notificacionesRoutes from "./modules/notificaciones/notificaciones.routes
 import empresaRoutes from "./modules/empresa/empresa.routes.js";
 import egresadoRoutes from "./modules/egresado/egresado.routes.js";
 import adminConfiguracionRoutes from "./modules/admin-configuracion/admin-configuracion.routes.js";
+import adminSqlEvidenciasRoutes from "./modules/admin-sql-evidencias/admin-sql-evidencias.routes.js";
 
 export function createApp(): Application {
   const app = express();
@@ -49,6 +50,7 @@ export function createApp(): Application {
   app.use("/api/empresa", empresaRoutes);
   app.use("/api/egresado", egresadoRoutes);
   app.use("/api/admin/configuracion", adminConfiguracionRoutes);
+  app.use("/api/admin/sql-evidencias", adminSqlEvidenciasRoutes);
 
   // Manejo centralizado de errores (último middleware).
   app.use(errorHandler);

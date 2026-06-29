@@ -65,7 +65,7 @@ export async function getEgresadoPerfil(idEgresado: number) {
        e.sexo,
        e.id_carrera,
        c.id_facultad,
-       c.nombre_carrera,
+       fn_nombre_carrera(e.id_carrera) AS nombre_carrera,
        c.grado_academico,
        f.nombre_facultad,
        u.nombre_usuario,
@@ -88,10 +88,11 @@ export async function getEgresadoDashboard(idEgresado: number) {
   const [metricsRows] = await pool.execute(
     `SELECT
        fn_total_postulaciones(?) AS totalPostulaciones,
+       fn_promedio_salario(?) AS promedioSalario,
        fn_estado_laboral_actual(?) AS estadoLaboralActual,
        fn_ultima_empresa(?) AS ultimaEmpresa,
        (SELECT COUNT(*) FROM oferta_laboral WHERE estado_oferta = 'Activa') AS ofertasActivas`,
-    [idEgresado, idEgresado, idEgresado]
+    [idEgresado, idEgresado, idEgresado, idEgresado]
   );
 
   const [ofertasRows] = await pool.query(
@@ -111,6 +112,7 @@ export async function getEgresadoDashboard(idEgresado: number) {
        o.estado_oferta,
        em.razon_social AS empresa
      FROM oferta_laboral o
+     INNER JOIN vw_ofertas_activas voa ON voa.id_oferta = o.id_oferta
      INNER JOIN empresa em ON em.id_usuario = o.id_empresa
      WHERE o.estado_oferta = 'Activa'
      ORDER BY o.fecha_publicacion DESC, o.id_oferta DESC
@@ -131,6 +133,7 @@ export async function getEgresadoDashboard(idEgresado: number) {
     profile: await getEgresadoPerfil(idEgresado),
     metrics: {
       totalPostulaciones: Number(metrics.totalPostulaciones ?? 0),
+      promedioSalario: Number(metrics.promedioSalario ?? 0),
       estadoLaboralActual: String(metrics.estadoLaboralActual ?? "Sin encuesta"),
       ultimaEmpresa: String(metrics.ultimaEmpresa ?? "Sin historial"),
       ofertasActivas: Number(metrics.ofertasActivas ?? 0),
@@ -185,6 +188,7 @@ export async function listBolsaLaboral(
   const [countRows] = await pool.query(
     `SELECT COUNT(*) AS total
      FROM oferta_laboral o
+     INNER JOIN vw_ofertas_activas voa ON voa.id_oferta = o.id_oferta
      INNER JOIN empresa em ON em.id_usuario = o.id_empresa
      ${whereSql}`,
     params
@@ -207,6 +211,7 @@ export async function listBolsaLaboral(
        o.estado_oferta,
        em.razon_social AS empresa
      FROM oferta_laboral o
+     INNER JOIN vw_ofertas_activas voa ON voa.id_oferta = o.id_oferta
      INNER JOIN empresa em ON em.id_usuario = o.id_empresa
      ${whereSql}
      ORDER BY o.fecha_publicacion DESC, o.id_oferta DESC
@@ -253,20 +258,28 @@ export async function createPostulacion(idEgresado: number, idOferta: number) {
     return { ok: false as const, status: 409, error: "Ya postulaste a esta oferta." };
   }
 
-  const [result] = await pool.execute(
-    `INSERT INTO postulacion(
-       id_egresado,
-       id_oferta,
-       fecha_postulacion,
-       estado_postulacion,
-       observaciones,
-       cv_adjunto
-     )
-     VALUES (?, ?, NOW(), 'Pendiente', ?, ?)`,
-    [idEgresado, idOferta, "Postulación registrada desde Bolsa Laboral", null]
-  );
-
-  return { ok: true as const, result };
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query("CALL sp_registrar_postulacion(?, ?, ?)", [
+      idEgresado,
+      idOferta,
+      null,
+    ]);
+    const [idRows] = await connection.query("SELECT LAST_INSERT_ID() AS id_postulacion");
+    const idPostulacion = Number((idRows as { id_postulacion: number }[])[0]?.id_postulacion ?? 0);
+    const [result] = await connection.execute(
+      "UPDATE postulacion SET observaciones = ? WHERE id_postulacion = ?",
+      ["Postulación registrada desde Bolsa Laboral", idPostulacion]
+    );
+    await connection.commit();
+    return { ok: true as const, result };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function listEgresadoPostulaciones(
@@ -292,6 +305,7 @@ export async function listEgresadoPostulaciones(
   const [countRows] = await pool.query(
     `SELECT COUNT(*) AS total
      FROM postulacion p
+     INNER JOIN vw_postulaciones_completas vpc ON vpc.id_postulacion = p.id_postulacion
      INNER JOIN oferta_laboral o ON o.id_oferta = p.id_oferta
      INNER JOIN empresa em ON em.id_usuario = o.id_empresa
      ${whereSql}`,
@@ -308,6 +322,7 @@ export async function listEgresadoPostulaciones(
        p.observaciones,
        p.cv_adjunto
      FROM postulacion p
+     INNER JOIN vw_postulaciones_completas vpc ON vpc.id_postulacion = p.id_postulacion
      INNER JOIN oferta_laboral o ON o.id_oferta = p.id_oferta
      INNER JOIN empresa em ON em.id_usuario = o.id_empresa
      ${whereSql}
@@ -329,40 +344,44 @@ export async function listHistorialLaboral(
   pagination: PaginationInput,
   filters: HistorialLaboralFilters
 ): Promise<PaginatedResult<unknown>> {
-  const where = ["id_egresado = ?"];
+  const where = ["h.id_egresado = ?"];
   const params: (string | number | boolean)[] = [idEgresado];
 
   if (filters.search) {
-    where.push("(nombre_empresa LIKE ? OR cargo LIKE ? OR modalidad LIKE ?)");
+    where.push("(h.nombre_empresa LIKE ? OR h.cargo LIKE ? OR h.modalidad LIKE ?)");
     const q = `%${filters.search}%`;
     params.push(q, q, q);
   }
 
   if (filters.actual === "true") {
-    where.push("actual = TRUE");
+    where.push("h.actual = TRUE");
   } else if (filters.actual === "false") {
-    where.push("actual = FALSE");
+    where.push("h.actual = FALSE");
   }
 
   const whereSql = `WHERE ${where.join(" AND ")}`;
   const [countRows] = await pool.execute(
-    `SELECT COUNT(*) AS total FROM historial_laboral ${whereSql}`,
+    `SELECT COUNT(*) AS total
+     FROM historial_laboral h
+     INNER JOIN vw_historial_laboral_completo vh ON vh.id_historial = h.id_historial
+     ${whereSql}`,
     params
   );
 
   const [rows] = await pool.query(
     `SELECT
-       id_historial,
-       nombre_empresa,
-       cargo,
-       fecha_inicio,
-       fecha_fin,
-       salario,
-       modalidad,
-       actual
-     FROM historial_laboral
+       h.id_historial,
+       h.nombre_empresa,
+       h.cargo,
+       h.fecha_inicio,
+       h.fecha_fin,
+       h.salario,
+       h.modalidad,
+       h.actual
+     FROM historial_laboral h
+     INNER JOIN vw_historial_laboral_completo vh ON vh.id_historial = h.id_historial
      ${whereSql}
-     ORDER BY fecha_inicio DESC, id_historial DESC
+     ORDER BY h.fecha_inicio DESC, h.id_historial DESC
      LIMIT ? OFFSET ?`,
     [...params, pagination.pageSize, pagination.offset]
   );
@@ -397,14 +416,18 @@ export async function updateEgresadoPerfil(idEgresado: number, input: EgresadoPe
   try {
     await connection.beginTransaction();
 
+    await connection.query("CALL sp_actualizar_egresado(?, ?, ?)", [
+      idEgresado,
+      input.telefono,
+      input.direccion,
+    ]);
+
     await connection.execute(
       `UPDATE egresado
        SET
          dni = ?,
          nombre_egresado = ?,
          apellidos_egresado = ?,
-         telefono = ?,
-         direccion = ?,
          fecha_egreso = ?,
          sexo = ?,
          id_carrera = ?
@@ -413,8 +436,6 @@ export async function updateEgresadoPerfil(idEgresado: number, input: EgresadoPe
         input.dni,
         input.nombre_egresado,
         input.apellidos_egresado,
-        input.telefono,
-        input.direccion,
         input.fecha_egreso,
         input.sexo,
         idCarrera,
@@ -550,43 +571,33 @@ export async function createEncuesta(idEgresado: number, input: EncuestaInput) {
   try {
     await connection.beginTransaction();
 
-    const [encuestaResult] = await connection.execute(
-      `INSERT INTO encuesta_seguimiento(
-         fecha_registro,
-         estado_laboral,
-         nombre_empresa_actual,
-         cargo_actual,
-         area_trabajo,
-         sueldo_mensual,
-         tipo_contrato,
-         satisfaccion_profesional,
-         tiempo_conseguir_empleo,
-         observaciones
-       )
-       VALUES (CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    await connection.query("CALL sp_registrar_encuesta(?, ?, ?, ?)", [
+      input.estado_laboral,
+      input.nombre_empresa_actual,
+      input.cargo_actual,
+      input.sueldo_mensual,
+    ]);
+    const [encuestaRows] = await connection.query("SELECT LAST_INSERT_ID() AS id_encuesta");
+    const idEncuesta = Number((encuestaRows as { id_encuesta: number }[])[0]?.id_encuesta ?? 0);
+    await connection.execute(
+      `UPDATE encuesta_seguimiento
+       SET area_trabajo = ?,
+           tipo_contrato = ?,
+           satisfaccion_profesional = ?,
+           tiempo_conseguir_empleo = ?,
+           observaciones = ?
+       WHERE id_encuesta = ?`,
       [
-        input.estado_laboral,
-        input.nombre_empresa_actual,
-        input.cargo_actual,
         input.area_trabajo,
-        input.sueldo_mensual,
         input.tipo_contrato,
         input.satisfaccion_profesional,
         input.tiempo_conseguir_empleo,
         input.observaciones,
+        idEncuesta,
       ]
     );
 
-    const idEncuesta = (encuestaResult as { insertId: number }).insertId;
-    await connection.execute(
-      `INSERT INTO seguimiento_egresado(
-         id_encuesta,
-         id_egresado,
-         fecha_asociacion
-       )
-       VALUES (?, ?, NOW())`,
-      [idEncuesta, idEgresado]
-    );
+    await connection.query("CALL sp_asociar_encuesta_egresado(?, ?)", [idEncuesta, idEgresado]);
 
     await connection.commit();
     return { ok: true as const, idEncuesta };

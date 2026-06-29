@@ -43,6 +43,9 @@ import {
   type EgresadoPostulacion,
   type HistorialLaboralItem,
   type PaginatedResponse,
+  type SqlEvidenceObject,
+  type SqlEvidenceOverview,
+  type SqlRunResult,
 } from "./api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -51,7 +54,7 @@ type Screen =
   | "login"
   | "admin-dashboard" | "admin-egresados" | "admin-empresas"
   | "admin-ofertas" | "admin-encuestas" | "admin-reportes" | "admin-config"
-  | "admin-auditoria"
+  | "admin-auditoria" | "admin-sql-evidencias"
   | "emp-dashboard" | "emp-crear-oferta" | "emp-postulaciones" | "emp-perfil"
   | "egr-dashboard" | "egr-bolsa" | "egr-postulaciones" | "egr-encuesta"
   | "egr-perfil" | "egr-historial"
@@ -63,7 +66,7 @@ const LAST_SCREEN_STORAGE_PREFIX = "seg_egresado_bolsa.last_screen.";
 const ROLE_SCREENS: Record<Role, Set<Screen>> = {
   admin: new Set([
     "admin-dashboard", "admin-egresados", "admin-empresas", "admin-ofertas",
-    "admin-encuestas", "admin-reportes", "admin-config", "admin-auditoria", "notificaciones",
+    "admin-encuestas", "admin-reportes", "admin-config", "admin-auditoria", "admin-sql-evidencias", "notificaciones",
   ]),
   empresa: new Set([
     "emp-dashboard", "emp-crear-oferta", "emp-postulaciones", "emp-perfil", "admin-ofertas", "notificaciones",
@@ -90,6 +93,25 @@ function readLastScreenForRole(role: Role): Screen {
 function saveLastScreenForRole(role: Role, screen: Screen) {
   const validScreen = canAccessScreen(role, screen) ? screen : HOME_BY_ROLE[role];
   localStorage.setItem(lastScreenStorageKey(role), validScreen);
+}
+
+function displaySessionName(session: AuthSession) {
+  return session.nombre_usuario || session.role;
+}
+
+function sessionInitials(session: AuthSession) {
+  const clean = displaySessionName(session).trim();
+  const parts = clean.split(/[.\s_-]+/).filter(Boolean);
+  const initials = parts.length > 1
+    ? `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`
+    : clean.slice(0, 2);
+  return initials.toUpperCase() || "UD";
+}
+
+function websiteHref(value: string | null | undefined) {
+  const clean = String(value ?? "").trim();
+  if (!clean) return null;
+  return /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
 }
 
 // ─── Mock Data (aligned with BD seg_egresado_bolsa) ──────────────────────────
@@ -730,7 +752,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
   const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
   const [correo, setCorreo] = useState("");
-  const [enviado, setEnviado] = useState(false);
+  const [recoveryNotice, setRecoveryNotice] = useState("");
   const [loginError, setLoginError] = useState("");
 
   const inp: React.CSSProperties = { width: "100%", padding: "11px 14px 11px 42px", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 14, color: "#0F172A", background: "#F9FAFB", outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
@@ -823,26 +845,18 @@ function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
         ) : (
           /* Recuperación de contraseña */
           <div style={{ width: "100%", maxWidth: 420 }}>
-            <button onClick={() => { setView("login"); setEnviado(false); setCorreo(""); }} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#64748B", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", marginBottom: 24 }}>← Volver al inicio de sesión</button>
+            <button onClick={() => { setView("login"); setRecoveryNotice(""); setCorreo(""); }} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#64748B", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", marginBottom: 24 }}>← Volver al inicio de sesión</button>
             <div style={{ width: 48, height: 48, borderRadius: 12, background: "#EFF6FF", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}><RefreshCw size={22} color="#2563EB" /></div>
             <h1 style={{ fontSize: 24, fontWeight: 700, color: "#0F172A", marginBottom: 8 }}>Recuperar Contraseña</h1>
-            <p style={{ color: "#64748B", fontSize: 14, marginBottom: 28, lineHeight: 1.6 }}>Ingresa tu correo institucional registrado. Se generará un enlace de recuperación con vigencia de 24 horas.</p>
-            {!enviado ? (
-              <>
-                <div style={{ marginBottom: 24 }}>
-                  <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Correo institucional</label>
-                  <div style={{ position: "relative" }}><User size={16} style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} /><input style={{ ...inp, paddingLeft: 42 }} type="email" placeholder="correo@udh.edu.pe" value={correo} onChange={e => setCorreo(e.target.value)} /></div>
-                </div>
-                <button onClick={() => setEnviado(true)} style={{ width: "100%", padding: "13px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Enviar enlace de recuperación</button>
-                <div style={{ marginTop: 16, padding: "14px 16px", background: "#F8FAFC", borderRadius: 10, border: "1px solid #E2E8F0", fontSize: 12, color: "#64748B", lineHeight: 1.6 }}>
-                  Se generará un enlace de recuperación con vigencia de 24 horas.
-                </div>
-              </>
-            ) : (
-              <div style={{ padding: "24px", background: "#DCFCE7", borderRadius: 12, border: "1px solid #BBF7D0", textAlign: "center" }}>
-                <CheckCircle size={32} color="#10B981" style={{ margin: "0 auto 12px" }} />
-                <div style={{ fontWeight: 700, fontSize: 15, color: "#166534", marginBottom: 8 }}>Enlace enviado</div>
-                <div style={{ fontSize: 13, color: "#166534" }}>Revisa tu correo <strong>{correo || "registrado"}</strong>. El token expirará en 24 horas (fecha_expiracion).</div>
+            <p style={{ color: "#64748B", fontSize: 14, marginBottom: 28, lineHeight: 1.6 }}>Ingresa tu correo institucional registrado para solicitar asistencia con el acceso.</p>
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Correo institucional</label>
+              <div style={{ position: "relative" }}><User size={16} style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} /><input style={{ ...inp, paddingLeft: 42 }} type="email" placeholder="correo@udh.edu.pe" value={correo} onChange={e => { setCorreo(e.target.value); setRecoveryNotice(""); }} /></div>
+            </div>
+            <button onClick={() => setRecoveryNotice(correo.trim() ? "La recuperación automática de contraseña aún no está habilitada. Contacta al administrador del sistema para restablecer tu acceso." : "Ingresa tu correo institucional para solicitar asistencia.")} style={{ width: "100%", padding: "13px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Solicitar asistencia</button>
+            {recoveryNotice && (
+              <div style={{ marginTop: 16, padding: "14px 16px", background: "#EFF6FF", borderRadius: 10, border: "1px solid #BFDBFE", fontSize: 12, color: "#1E40AF", lineHeight: 1.6 }}>
+                {recoveryNotice}
               </div>
             )}
           </div>
@@ -1263,7 +1277,7 @@ function AdminEmpresas() {
                 <TD>{e.nombre_comercial}</TD>
                 <TD><span style={{ padding: "3px 10px", background: "#F1F5F9", borderRadius: 6, fontSize: 12 }}>{e.sector}</span></TD>
                 <TD>{e.telefono}</TD>
-                <TD><a href="#" style={{ color: "#2563EB", fontSize: 12 }}>{e.pagina_web}</a></TD>
+                <TD>{websiteHref(e.pagina_web) ? <a href={websiteHref(e.pagina_web) ?? undefined} target="_blank" rel="noreferrer" style={{ color: "#2563EB", fontSize: 12 }}>{e.pagina_web}</a> : "—"}</TD>
                 <TD><StatusBadge label={e.estado_usuario} /></TD>
                 <TD>
                   <div style={{ display: "flex", gap: 2 }}>
@@ -1891,7 +1905,7 @@ function Configuracion() {
             <FormField label="Estado del sistema" required>
               <div style={{ display: "flex", gap: 10 }}>
                 {["Activo", "Inactivo"].map(opt => (
-                  <button key={opt} onClick={() => setEstado(opt)} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "2px solid", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, fontSize: 13, borderColor: estado === opt ? (opt === "Activo" ? "#10B981" : "#EF4444") : "#E2E8F0", background: estado === opt ? (opt === "Activo" ? "#DCFCE7" : "#FEE2E2") : "#fff", color: estado === opt ? (opt === "Activo" ? "#166534" : "#991B1B") : "#64748B" }}>
+                  <button type="button" key={opt} onClick={() => setEstado(opt)} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "2px solid", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, fontSize: 13, borderColor: estado === opt ? (opt === "Activo" ? "#10B981" : "#EF4444") : "#E2E8F0", background: estado === opt ? (opt === "Activo" ? "#DCFCE7" : "#FEE2E2") : "#fff", color: estado === opt ? (opt === "Activo" ? "#166534" : "#991B1B") : "#64748B" }}>
                     {opt === "Activo" ? "● Activo" : "○ Inactivo"}
                   </button>
                 ))}
@@ -1978,6 +1992,237 @@ function Auditoria() {
         </div>
         <Pagination total={auditoriaPage.total} showing={filtered.length} page={auditoriaPage.page} pageSize={auditoriaPage.pageSize} onPageChange={setPage} />
       </Card>
+    </div>
+  );
+}
+
+// ─── ADMIN: Evidencias SQL ───────────────────────────────────────────────────
+type SqlEvidenceSection = "vistas" | "funciones" | "procedimientos" | "auditoria" | "signal" | "roles";
+
+const SQL_SECTION_LABELS: Record<SqlEvidenceSection, string> = {
+  vistas: "Vistas",
+  funciones: "Funciones",
+  procedimientos: "Procedimientos",
+  auditoria: "Auditoría",
+  signal: "SIGNAL",
+  roles: "Usuarios y permisos",
+};
+
+function SqlResultTable({ rows }: { rows?: Record<string, unknown>[] }) {
+  const data = rows ?? [];
+  if (data.length === 0) {
+    return <div style={{ padding: "14px 16px", fontSize: 13, color: "#64748B" }}>Sin filas para mostrar.</div>;
+  }
+  const columns = Object.keys(data[0]).slice(0, 8);
+  return (
+    <div style={{ overflowX: "auto", borderTop: "1px solid #F1F5F9" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead><tr>{columns.map(c => <TH key={c} label={humanizeTechnicalText(c)} />)}</tr></thead>
+        <tbody>
+          {data.slice(0, 20).map((row, i) => (
+            <tr key={i}>{columns.map(c => <TD key={c}>{String(row[c] ?? "—")}</TD>)}</tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SqlObjectRow({
+  item,
+  actionLabel,
+  running,
+  onRun,
+}: {
+  item: SqlEvidenceObject;
+  actionLabel: string;
+  running?: boolean;
+  onRun: () => void;
+}) {
+  return (
+    <tr>
+      <TD mono>{item.name}</TD>
+      <TD>{item.description}</TD>
+      <TD>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {item.usesJoins && <Badge label="JOIN" variant="info" />}
+          {item.usesFunctions && <Badge label="Función" variant="success" />}
+          {item.hasTwoParams && <Badge label="2+ parámetros" variant="neutral" />}
+          {item.category && <Badge label={item.category === "numerica" ? "Numérica" : item.category === "texto" ? "Texto" : item.category === "lectura" ? "Lectura" : "Escritura"} variant={item.category === "escritura" ? "warning" : "info"} />}
+          <Badge label="Flujo real" variant="success" />
+        </div>
+      </TD>
+      <TD>
+        <div>{item.realUsage ?? item.parameters?.join(", ") ?? item.restrictions?.join("; ") ?? item.safeMode ?? "—"}</div>
+        {item.realEndpoint && <div style={{ fontSize: 11, color: "#64748B", marginTop: 4 }}>{item.realEndpoint}</div>}
+      </TD>
+      <TD>
+        <div style={{ fontSize: 12, color: "#475569" }}>{item.backendFile ?? "backend/src/modules/admin-sql-evidencias/admin-sql-evidencias.service.ts"}</div>
+      </TD>
+      <TD><Btn variant="outline" small disabled={running} onClick={onRun}>{running ? "Ejecutando..." : actionLabel}</Btn></TD>
+    </tr>
+  );
+}
+
+function SqlEvidencias() {
+  const { toast } = useFeedback();
+  const [section, setSection] = useState<SqlEvidenceSection>("vistas");
+  const [runningKey, setRunningKey] = useState("");
+  const [resultTitle, setResultTitle] = useState("Resultado");
+  const [result, setResult] = useState<SqlRunResult | null>(null);
+  const [recentAudit, setRecentAudit] = useState<AdminAuditoria[]>([]);
+  const overview = useApiData<SqlEvidenceOverview | null>(true, adminApi.sqlEvidencias, null);
+
+  const loadRecentAudit = useCallback(async () => {
+    try {
+      setRecentAudit(await adminApi.auditoriaSqlReciente());
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (section === "auditoria") {
+      loadRecentAudit();
+    }
+  }, [section, loadRecentAudit]);
+
+  async function runControlled(key: string, title: string, runner: () => Promise<SqlRunResult>) {
+    setRunningKey(key);
+    try {
+      const data = await runner();
+      setResultTitle(title);
+      setResult(data);
+      toast("success", data.message ?? "Evidencia ejecutada correctamente.");
+      if (section === "auditoria") await loadRecentAudit();
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    } finally {
+      setRunningKey("");
+    }
+  }
+
+  if (!overview) {
+    return (
+      <div>
+        <PageHeader title="Evidencias SQL" subtitle="Cargando matriz de cumplimiento..." />
+        <Card style={{ padding: 20 }}><div style={{ fontSize: 13, color: "#64748B" }}>Conectando con el backend.</div></Card>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <PageHeader title="Evidencias SQL" subtitle="Objetos SQL integrados al funcionamiento real del sistema" />
+
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ padding: "16px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between", gap: 12 }}>
+          <div>
+            <div style={{ fontWeight: 700, color: "#0F172A", fontSize: 14 }}>Matriz de cumplimiento</div>
+            <div style={{ color: "#64748B", fontSize: 12, marginTop: 3 }}>{overview.note}</div>
+          </div>
+          <Badge label="Solo Admin" variant="info" />
+        </div>
+        <SqlResultTable rows={overview.matrix.map(m => ({ Tipo: m.type, Exigido: m.required, Implementado: m.implemented, Pantalla: m.screen, Endpoint: m.endpoint }))} />
+      </Card>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+        {(Object.keys(SQL_SECTION_LABELS) as SqlEvidenceSection[]).map(key => (
+          <button key={key} onClick={() => setSection(key)} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E2E8F0", background: section === key ? "#2563EB" : "#fff", color: section === key ? "#fff" : "#334155", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+            {SQL_SECTION_LABELS[key]}
+          </button>
+        ))}
+      </div>
+
+      {section === "vistas" && (
+        <Card>
+          <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", fontWeight: 700, fontSize: 14 }}>10 vistas existentes</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr><TH label="Vista" /><TH label="Descripción" /><TH label="Tipo" /><TH label="Flujo real" /><TH label="Archivo backend" /><TH label="Acción" /></tr></thead>
+            <tbody>{overview.views.map(v => <SqlObjectRow key={v.name} item={v} actionLabel="Ver resultados" running={runningKey === v.name} onRun={() => runControlled(v.name, v.name, () => adminApi.sqlVista(v.name))} />)}</tbody>
+          </table>
+        </Card>
+      )}
+
+      {section === "funciones" && (
+        <Card>
+          <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", fontWeight: 700, fontSize: 14 }}>10 funciones SQL: numéricas y de texto</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr><TH label="Función" /><TH label="Descripción" /><TH label="Tipo" /><TH label="Flujo real" /><TH label="Archivo backend" /><TH label="Acción" /></tr></thead>
+            <tbody>{overview.functions.map(f => <SqlObjectRow key={f.name} item={f} actionLabel="Ejecutar" running={runningKey === f.name} onRun={() => runControlled(f.name, f.name, () => adminApi.ejecutarFuncionSql(f.name))} />)}</tbody>
+          </table>
+        </Card>
+      )}
+
+      {section === "procedimientos" && (
+        <Card>
+          <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", fontWeight: 700, fontSize: 14 }}>15 procedimientos almacenados</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr><TH label="Procedimiento" /><TH label="Descripción" /><TH label="Tipo" /><TH label="Flujo real" /><TH label="Archivo backend" /><TH label="Acción" /></tr></thead>
+            <tbody>{overview.procedures.map(p => <SqlObjectRow key={p.name} item={p} actionLabel="Ejecutar" running={runningKey === p.name} onRun={() => runControlled(p.name, p.name, () => adminApi.ejecutarProcedimientoSql(p.name))} />)}</tbody>
+          </table>
+        </Card>
+      )}
+
+      {section === "auditoria" && (
+        <div>
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>10 triggers de auditoría</div>
+              <Btn variant="outline" disabled={runningKey === "audit-evidence"} onClick={() => runControlled("audit-evidence", "Auditoría INSERT/UPDATE/DELETE", () => adminApi.auditoriaSqlProbar())}><ShieldCheck size={14} /> Probar auditoría</Btn>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr><TH label="Trigger" /><TH label="Tabla" /><TH label="Acción" /><TH label="Flujo real" /><TH label="Endpoint" /><TH label="Archivo backend" /></tr></thead>
+              <tbody>{overview.auditTriggers.map(t => <tr key={t.name}><TD mono>{t.name}</TD><TD>{humanizeTechnicalText(t.table)}</TD><TD><Badge label={humanizeAction(t.action ?? "")} variant={STATUS_MAP[t.action ?? ""] ?? "neutral"} /></TD><TD>{t.realUsage}</TD><TD>{t.realEndpoint}</TD><TD>{t.backendFile}</TD></tr>)}</tbody>
+            </table>
+          </Card>
+          <Card>
+            <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>Auditoría reciente real</div>
+              <Btn variant="outline" small onClick={loadRecentAudit}><RefreshCw size={13} /> Actualizar</Btn>
+            </div>
+            <SqlResultTable rows={recentAudit as unknown as Record<string, unknown>[]} />
+          </Card>
+        </div>
+      )}
+
+      {section === "signal" && (
+        <Card>
+          <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", fontWeight: 700, fontSize: 14 }}>15 triggers SIGNAL</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr><TH label="Trigger" /><TH label="Descripción" /><TH label="Tipo" /><TH label="Flujo real" /><TH label="Archivo backend" /><TH label="Acción" /></tr></thead>
+            <tbody>
+              {overview.signalTriggers.map(t => <SqlObjectRow key={t.name} item={{ ...t, category: "escritura" }} actionLabel="Provocar SIGNAL" running={runningKey === t.name} onRun={() => runControlled(t.name, t.name, () => adminApi.probarSignalSql(t.name))} />)}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      {section === "roles" && (
+        <Card>
+          <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9" }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>3 grupos/roles de MySQL y relación con el aplicativo</div>
+            <div style={{ fontSize: 12, color: "#64748B", marginTop: 4 }}>Los roles MySQL existen como evidencia académica; la autorización operativa usa JWT y requireRole en el backend.</div>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr><TH label="Rol MySQL" /><TH label="Usuario" /><TH label="Permisos" /></tr></thead>
+            <tbody>{overview.roles.map(r => <tr key={r.role}><TD mono>{r.role}</TD><TD>{r.user}</TD><TD>{r.permissions.join("; ")}</TD></tr>)}</tbody>
+          </table>
+        </Card>
+      )}
+
+      {result && (
+        <Card style={{ marginTop: 16 }}>
+          <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9" }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{resultTitle}</div>
+            <div style={{ fontSize: 12, color: "#64748B", marginTop: 4 }}>
+              {result.message ?? `Parámetros usados: ${(result.params ?? []).join(", ") || "sin parámetros"}`}
+              {result.result !== undefined ? ` · Resultado: ${String(result.result ?? "NULL")}` : ""}
+            </div>
+          </div>
+          <SqlResultTable rows={result.rows} />
+        </Card>
+      )}
     </div>
   );
 }
@@ -2582,7 +2827,7 @@ function MiPerfil() {
         <div style={{ display: "flex", gap: 24, alignItems: "flex-start", marginBottom: 28, paddingBottom: 24, borderBottom: "1px solid #F1F5F9" }}>
           <div style={{ flexShrink: 0 }}>
             <div style={{ width: 100, height: 100, borderRadius: 16, background: "linear-gradient(135deg, #2563EB, #6366F1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, fontWeight: 700, color: "#fff", marginBottom: 10 }}>{initials}</div>
-            <button onClick={unavailableCrudAction} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1px solid #D1D5DB", borderRadius: 8, background: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", color: "#374151" }}><Upload size={13} /> Foto (visual)</button>
+            <button type="button" onClick={unavailableCrudAction} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1px solid #D1D5DB", borderRadius: 8, background: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", color: "#374151" }}><Upload size={13} /> Foto (visual)</button>
           </div>
           <div>
             <div style={{ fontSize: 20, fontWeight: 700, color: "#0F172A" }}>{profile.nombre_egresado} {profile.apellidos_egresado}</div>
@@ -3164,6 +3409,7 @@ const MENUS: Record<Role, MenuItem[]> = {
     { label: "Encuestas", screen: "admin-encuestas", icon: <ClipboardList size={17} /> },
     { label: "Reportes", screen: "admin-reportes", icon: <BarChart2 size={17} /> },
     { label: "Auditoría", screen: "admin-auditoria", icon: <ShieldCheck size={17} /> },
+    { label: "Evidencias SQL", screen: "admin-sql-evidencias", icon: <FileText size={17} /> },
     { label: "Configuración", screen: "admin-config", icon: <Settings size={17} /> },
     { label: "Notificaciones", screen: "notificaciones", icon: <Bell size={17} /> },
   ],
@@ -3186,11 +3432,11 @@ const MENUS: Record<Role, MenuItem[]> = {
   ],
 };
 
-function Sidebar({ role, screen, setScreen, onLogout, unreadCount }: { role: Role; screen: Screen; setScreen: (s: Screen) => void; onLogout: () => void; unreadCount: number }) {
+function Sidebar({ session, role, screen, setScreen, onLogout, unreadCount }: { session: AuthSession; role: Role; screen: Screen; setScreen: (s: Screen) => void; onLogout: () => void; unreadCount: number }) {
   const roleLabel: Record<Role, string> = { admin: "Administrador", empresa: "Empresa", egresado: "Egresado" };
   const roleColor: Record<Role, string> = { admin: "#2563EB", empresa: "#10B981", egresado: "#6366F1" };
-  const avatars: Record<Role, string> = { admin: "AS", empresa: "FU", egresado: "BP" };
-  const userNames: Record<Role, string> = { admin: "admin.general001", empresa: "Finanzas Ugarte S.R.L.", egresado: "bartolomé.vicente85683" };
+  const avatar = sessionInitials(session);
+  const userName = displaySessionName(session);
 
   return (
     <div style={{ position: "fixed", top: 0, left: 0, width: 240, height: "100vh", background: "#0A2647", display: "flex", flexDirection: "column", zIndex: 100 }}>
@@ -3227,9 +3473,9 @@ function Sidebar({ role, screen, setScreen, onLogout, unreadCount }: { role: Rol
       </nav>
       <div style={{ padding: "14px 12px", borderTop: "1px solid rgba(255,255,255,0.07)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: "#2563EB", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 12, flexShrink: 0 }}>{avatars[role]}</div>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: "#2563EB", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 12, flexShrink: 0 }}>{avatar}</div>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>{userNames[role]}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>{userName}</div>
             <div style={{ fontSize: 10, color: "rgba(255,255,255,0.38)" }}>{roleLabel[role]}</div>
           </div>
         </div>
@@ -3246,6 +3492,7 @@ const SCREEN_TITLES: Partial<Record<Screen, string>> = {
   "admin-empresas": "Gestión de Empresas", "admin-ofertas": "Gestión de Ofertas Laborales",
   "admin-encuestas": "Gestión de Encuestas", "admin-reportes": "Reportes y Estadísticas",
   "admin-config": "Configuración del Sistema", "admin-auditoria": "Auditoría del Sistema",
+  "admin-sql-evidencias": "Evidencias SQL",
   "emp-dashboard": "Panel de Empresa", "emp-crear-oferta": "Crear Oferta Laboral",
   "emp-postulaciones": "Postulaciones Recibidas", "emp-perfil": "Perfil de Empresa",
   "egr-dashboard": "Mi Dashboard", "egr-bolsa": "Bolsa Laboral",
@@ -3254,15 +3501,20 @@ const SCREEN_TITLES: Partial<Record<Screen, string>> = {
   "notificaciones": "Notificaciones",
 };
 
-function TopNav({ role, screen, setScreen, unreadCount }: { role: Role; screen: Screen; setScreen: (s: Screen) => void; unreadCount: number }) {
-  const userNames: Record<Role, string> = { admin: "admin.general001", empresa: "Finanzas Ugarte S.R.L.", egresado: "Bartolomé Pilar Vicente Abascal" };
-  const avatars: Record<Role, string> = { admin: "AS", empresa: "FU", egresado: "BP" };
+function screenTitleForRole(role: Role, screen: Screen) {
+  if (role === "empresa" && screen === "admin-ofertas") return "Mis Ofertas";
+  return SCREEN_TITLES[screen] ?? screen;
+}
+
+function TopNav({ session, role, screen, setScreen, unreadCount }: { session: AuthSession; role: Role; screen: Screen; setScreen: (s: Screen) => void; unreadCount: number }) {
+  const userName = displaySessionName(session);
+  const avatar = sessionInitials(session);
   const roles: Record<Role, string> = { admin: "Administrador", empresa: "Empresa", egresado: "Egresado" };
 
   return (
     <div style={{ position: "fixed", top: 0, left: 240, right: 0, height: 62, background: "#fff", borderBottom: "1px solid #E2E8F0", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 26px", zIndex: 99, boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
       <div>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "#0F172A" }}>{SCREEN_TITLES[screen] ?? screen}</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#0F172A" }}>{screenTitleForRole(role, screen)}</div>
         <div style={{ fontSize: 11, color: "#94A3B8" }}>Sistema de Seguimiento de Egresados y Bolsa Laboral · Universidad de Huánuco (UDH)</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -3271,9 +3523,9 @@ function TopNav({ role, screen, setScreen, unreadCount }: { role: Role; screen: 
           {unreadCount > 0 && <span style={{ position: "absolute", top: 6, right: 6, width: 8, height: 8, borderRadius: "50%", background: "#EF4444", border: "2px solid #fff" }} />}
         </button>
         <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: "#2563EB", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 12 }}>{avatars[role]}</div>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: "#2563EB", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 12 }}>{avatar}</div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#0F172A" }}>{userNames[role]}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#0F172A" }}>{userName}</div>
             <div style={{ fontSize: 11, color: "#94A3B8" }}>{roles[role]}</div>
           </div>
         </div>
@@ -3408,6 +3660,7 @@ function AppContent() {
       case "admin-reportes": return <Reportes />;
       case "admin-config": return <Configuracion />;
       case "admin-auditoria": return <Auditoria />;
+      case "admin-sql-evidencias": return <SqlEvidencias />;
       case "emp-dashboard": return <EmpresaDashboard setScreen={setScreen} />;
       case "emp-crear-oferta": return <CrearOferta />;
       case "emp-postulaciones": return <PostulacionesRecibidas />;
@@ -3425,8 +3678,8 @@ function AppContent() {
 
   return (
     <div style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
-      <Sidebar role={role} screen={screen} setScreen={setScreen} onLogout={handleLogout} unreadCount={unreadCount} />
-      <TopNav role={role} screen={screen} setScreen={setScreen} unreadCount={unreadCount} />
+      <Sidebar session={session} role={role} screen={screen} setScreen={setScreen} onLogout={handleLogout} unreadCount={unreadCount} />
+      <TopNav session={session} role={role} screen={screen} setScreen={setScreen} unreadCount={unreadCount} />
       <main style={{ marginLeft: 240, paddingTop: 62, minHeight: "100vh", background: "#F1F5F9" }}>
         <div style={{ padding: 26 }}>{renderScreen()}</div>
       </main>

@@ -31,14 +31,14 @@ export async function listEgresados(
 
   if (filters.search) {
     where.push(
-      "(e.dni LIKE ? OR e.nombre_egresado LIKE ? OR e.apellidos_egresado LIKE ? OR c.nombre_carrera LIKE ? OR u.correo LIKE ?)"
+      "(ve.dni LIKE ? OR ve.nombre_egresado LIKE ? OR ve.apellidos_egresado LIKE ? OR ve.nombre_carrera LIKE ? OR u.correo LIKE ?)"
     );
     const q = `%${filters.search}%`;
     params.push(q, q, q, q, q);
   }
 
   if (filters.carrera) {
-    where.push("c.nombre_carrera = ?");
+    where.push("ve.nombre_carrera = ?");
     params.push(filters.carrera);
   }
 
@@ -52,6 +52,7 @@ export async function listEgresados(
   const [countRows] = await pool.query(
     `SELECT COUNT(*) AS total
      FROM egresado e
+     INNER JOIN vw_egresados_carrera_facultad ve ON ve.id_usuario = e.id_usuario
      INNER JOIN usuario u ON u.id_usuario = e.id_usuario
      INNER JOIN carrera c ON c.id_carrera = e.id_carrera
      INNER JOIN facultad f ON f.id_facultad = c.id_facultad
@@ -62,24 +63,25 @@ export async function listEgresados(
   const [rows] = await pool.query(
     `SELECT
        e.id_usuario,
-       e.dni,
-       e.nombre_egresado,
-       e.apellidos_egresado,
+       ve.dni,
+       ve.nombre_egresado,
+       ve.apellidos_egresado,
        e.telefono,
        e.direccion,
-       e.fecha_egreso,
+       ve.fecha_egreso,
        e.sexo,
        c.id_carrera,
        f.id_facultad,
-       c.nombre_carrera,
+       fn_nombre_carrera(e.id_carrera) AS nombre_carrera,
        c.grado_academico,
-       f.nombre_facultad,
+       ve.nombre_facultad,
        u.nombre_usuario,
        u.correo,
        u.estado_usuario,
        u.fecha_creacion,
        u.ultimo_acceso
      FROM egresado e
+     INNER JOIN vw_egresados_carrera_facultad ve ON ve.id_usuario = e.id_usuario
      INNER JOIN usuario u ON u.id_usuario = e.id_usuario
      INNER JOIN carrera c ON c.id_carrera = e.id_carrera
      INNER JOIN facultad f ON f.id_facultad = c.id_facultad
@@ -116,29 +118,26 @@ export async function createEgresado(input: AdminEgresadoInput) {
     );
 
     const idUsuario = (usuarioResult as { insertId: number }).insertId;
+    await connection.query("CALL sp_registrar_egresado(?, ?, ?, ?, ?)", [
+      idUsuario,
+      input.dni,
+      input.nombre_egresado,
+      input.apellidos_egresado,
+      input.id_carrera,
+    ]);
     await connection.execute(
-      `INSERT INTO egresado(
-         id_usuario,
-         dni,
-         nombre_egresado,
-         apellidos_egresado,
-         telefono,
-         direccion,
-         fecha_egreso,
-         sexo,
-         id_carrera
-       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `UPDATE egresado
+       SET telefono = ?,
+           direccion = ?,
+           fecha_egreso = ?,
+           sexo = ?
+       WHERE id_usuario = ?`,
       [
-        idUsuario,
-        input.dni,
-        input.nombre_egresado,
-        input.apellidos_egresado,
         input.telefono,
         input.direccion,
         input.fecha_egreso,
         input.sexo,
-        input.id_carrera,
+        idUsuario,
       ]
     );
 
@@ -157,14 +156,18 @@ export async function updateEgresado(idUsuario: number, input: AdminEgresadoInpu
   try {
     await connection.beginTransaction();
 
+    await connection.query("CALL sp_actualizar_egresado(?, ?, ?)", [
+      idUsuario,
+      input.telefono,
+      input.direccion,
+    ]);
+
     const [result] = await connection.execute(
       `UPDATE egresado
        SET
          dni = ?,
          nombre_egresado = ?,
          apellidos_egresado = ?,
-         telefono = ?,
-         direccion = ?,
          fecha_egreso = ?,
          sexo = ?,
          id_carrera = ?
@@ -173,8 +176,6 @@ export async function updateEgresado(idUsuario: number, input: AdminEgresadoInpu
         input.dni,
         input.nombre_egresado,
         input.apellidos_egresado,
-        input.telefono,
-        input.direccion,
         input.fecha_egreso,
         input.sexo,
         input.id_carrera,
@@ -237,10 +238,15 @@ export async function deleteEgresado(idUsuario: number) {
 }
 
 export async function updateEgresadoEstado(idUsuario: number, estadoUsuario: "Activo" | "Inactivo") {
-  const [result] = await pool.execute(
-    "UPDATE usuario SET estado_usuario = ? WHERE id_usuario = ? AND EXISTS (SELECT 1 FROM egresado e WHERE e.id_usuario = usuario.id_usuario)",
-    [estadoUsuario, idUsuario]
-  );
+  const connection = await pool.getConnection();
+  try {
+    await connection.query("CALL sp_cambiar_estado_egresado_seguro(?, ?)", [idUsuario, estadoUsuario]);
+    const [rows] = await connection.query("SELECT ROW_COUNT() AS affectedRows");
+    const affectedRows = Number((rows as { affectedRows: number }[])[0]?.affectedRows ?? 0);
+    const result = { affectedRows };
 
-  return result;
+    return result;
+  } finally {
+    connection.release();
+  }
 }

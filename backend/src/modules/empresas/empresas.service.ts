@@ -102,27 +102,25 @@ export async function createEmpresa(input: AdminEmpresaInput) {
     );
 
     const idUsuario = (usuarioResult as { insertId: number }).insertId;
+    await connection.query("CALL sp_registrar_empresa(?, ?, ?, ?)", [
+      idUsuario,
+      input.ruc,
+      input.razon_social,
+      input.sector,
+    ]);
     await connection.execute(
-      `INSERT INTO empresa(
-         id_usuario,
-         ruc,
-         razon_social,
-         nombre_comercial,
-         sector,
-         direccion,
-         telefono,
-         pagina_web
-       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `UPDATE empresa
+       SET nombre_comercial = ?,
+           direccion = ?,
+           telefono = ?,
+           pagina_web = ?
+       WHERE id_usuario = ?`,
       [
-        idUsuario,
-        input.ruc,
-        input.razon_social,
         input.nombre_comercial,
-        input.sector,
         input.direccion,
         input.telefono,
         input.pagina_web,
+        idUsuario,
       ]
     );
 
@@ -141,6 +139,12 @@ export async function updateEmpresa(idUsuario: number, input: AdminEmpresaInput)
   try {
     await connection.beginTransaction();
 
+    await connection.query("CALL sp_actualizar_empresa(?, ?, ?)", [
+      idUsuario,
+      input.telefono,
+      input.pagina_web,
+    ]);
+
     const [result] = await connection.execute(
       `UPDATE empresa
        SET
@@ -148,9 +152,7 @@ export async function updateEmpresa(idUsuario: number, input: AdminEmpresaInput)
          razon_social = ?,
          nombre_comercial = ?,
          sector = ?,
-         direccion = ?,
-         telefono = ?,
-         pagina_web = ?
+         direccion = ?
        WHERE id_usuario = ?`,
       [
         input.ruc,
@@ -158,8 +160,6 @@ export async function updateEmpresa(idUsuario: number, input: AdminEmpresaInput)
         input.nombre_comercial,
         input.sector,
         input.direccion,
-        input.telefono,
-        input.pagina_web,
         idUsuario,
       ]
     );
@@ -219,10 +219,15 @@ export async function deleteEmpresa(idUsuario: number) {
 }
 
 export async function updateEmpresaEstado(idUsuario: number, estadoUsuario: "Activo" | "Inactivo") {
-  const [result] = await pool.execute(
-    "UPDATE usuario SET estado_usuario = ? WHERE id_usuario = ? AND EXISTS (SELECT 1 FROM empresa em WHERE em.id_usuario = usuario.id_usuario)",
-    [estadoUsuario, idUsuario]
-  );
+  const connection = await pool.getConnection();
+  try {
+    await connection.query("CALL sp_cambiar_estado_empresa_seguro(?, ?)", [idUsuario, estadoUsuario]);
+    const [rows] = await connection.query("SELECT ROW_COUNT() AS affectedRows");
+    const affectedRows = Number((rows as { affectedRows: number }[])[0]?.affectedRows ?? 0);
+    const result = { affectedRows };
 
-  return result;
+    return result;
+  } finally {
+    connection.release();
+  }
 }

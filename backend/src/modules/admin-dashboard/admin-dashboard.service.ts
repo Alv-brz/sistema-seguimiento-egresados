@@ -36,6 +36,12 @@ async function count(sql: string, params: (string | number)[] = []): Promise<num
   return Number((rows as CountRow[])[0]?.total ?? 0);
 }
 
+async function rows<T = unknown>(sql: string, params: (string | number)[] = []): Promise<T[]> {
+  const [result] = await pool.query(sql, params);
+  const firstSet = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+  return firstSet as T[];
+}
+
 function buildWhere(conditions: string[], params: (string | number)[]): QueryParts {
   return {
     whereSql: conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "",
@@ -180,6 +186,7 @@ export async function getAdminDashboard(filters: AdminDashboardFilters = {}) {
   const oferta = ofertaWhere(filters);
   const hasOfertaScope = oferta.needsGraduateJoin || Boolean(filters.anio);
   const ofertaCountExpression = oferta.needsGraduateJoin ? "COUNT(DISTINCT o.id_oferta)" : "COUNT(*)";
+  const hasFilters = Boolean(filters.facultad || filters.carrera || filters.anio || filters.estadoLaboral);
 
   const [
     totalEgresados,
@@ -205,19 +212,23 @@ export async function getAdminDashboard(filters: AdminDashboardFilters = {}) {
            ${oferta.whereSql}`,
           oferta.params
         )
-      : count("SELECT COUNT(*) AS total FROM empresa"),
-    count(
-      `SELECT ${ofertaCountExpression} AS total
-       ${ofertaFrom(oferta.needsGraduateJoin)}
-       ${oferta.whereSql}`,
-      oferta.params
-    ),
-    count(
-      `SELECT ${ofertaCountExpression} AS total
-       ${ofertaFrom(oferta.needsGraduateJoin)}
-       ${oferta.whereSql ? `${oferta.whereSql} AND` : "WHERE"} o.estado_oferta = 'Activa'`,
-      oferta.params
-    ),
+      : count("SELECT COUNT(*) AS total FROM vw_cantidad_ofertas_empresa"),
+    hasFilters
+      ? count(
+          `SELECT ${ofertaCountExpression} AS total
+           ${ofertaFrom(oferta.needsGraduateJoin)}
+           ${oferta.whereSql}`,
+          oferta.params
+        )
+      : count("SELECT COUNT(*) AS total FROM vw_empresa_ofertas"),
+    hasFilters
+      ? count(
+          `SELECT ${ofertaCountExpression} AS total
+           ${ofertaFrom(oferta.needsGraduateJoin)}
+           ${oferta.whereSql ? `${oferta.whereSql} AND` : "WHERE"} o.estado_oferta = 'Activa'`,
+          oferta.params
+        )
+      : count("SELECT COUNT(*) AS total FROM vw_ofertas_activas"),
     count(
       `SELECT COUNT(*) AS total
        FROM postulacion p
@@ -227,16 +238,18 @@ export async function getAdminDashboard(filters: AdminDashboardFilters = {}) {
        ${postulacion.whereSql}`,
       postulacion.params
     ),
-    count(
-      `SELECT COUNT(*) AS total
-       FROM encuesta_seguimiento es
-       INNER JOIN seguimiento_egresado se ON se.id_encuesta = es.id_encuesta
-       INNER JOIN egresado e ON e.id_usuario = se.id_egresado
-       INNER JOIN carrera c ON c.id_carrera = e.id_carrera
-       INNER JOIN facultad f ON f.id_facultad = c.id_facultad
-       ${encuesta.whereSql}`,
-      encuesta.params
-    ),
+    hasFilters
+      ? count(
+          `SELECT COUNT(*) AS total
+           FROM encuesta_seguimiento es
+           INNER JOIN seguimiento_egresado se ON se.id_encuesta = es.id_encuesta
+           INNER JOIN egresado e ON e.id_usuario = se.id_egresado
+           INNER JOIN carrera c ON c.id_carrera = e.id_carrera
+           INNER JOIN facultad f ON f.id_facultad = c.id_facultad
+           ${encuesta.whereSql}`,
+          encuesta.params
+        )
+      : count("SELECT fn_total_encuestas() AS total"),
   ]);
 
   const counts: DashboardCounts = {
@@ -249,14 +262,23 @@ export async function getAdminDashboard(filters: AdminDashboardFilters = {}) {
   };
 
   const [carreraRows] = await pool.query(
-    `SELECT c.nombre_carrera AS name, COUNT(*) AS egresados
-     FROM egresado e
-     INNER JOIN carrera c ON c.id_carrera = e.id_carrera
-     INNER JOIN facultad f ON f.id_facultad = c.id_facultad
-     ${egresado.whereSql}
-     GROUP BY c.nombre_carrera
-     ORDER BY egresados DESC
-     LIMIT 6`,
+    !hasFilters
+      ? `SELECT
+           c.nombre_carrera AS name,
+           fn_total_egresados_carrera(c.id_carrera) AS egresados
+         FROM carrera c
+         LEFT JOIN vw_promedio_salarial_carrera vps ON vps.nombre_carrera = c.nombre_carrera
+         ORDER BY egresados DESC
+         LIMIT 6`
+      : `SELECT c.nombre_carrera AS name, COUNT(*) AS egresados
+         FROM egresado e
+         INNER JOIN carrera c ON c.id_carrera = e.id_carrera
+         INNER JOIN facultad f ON f.id_facultad = c.id_facultad
+         LEFT JOIN vw_promedio_salarial_carrera vps ON vps.nombre_carrera = c.nombre_carrera
+         ${egresado.whereSql}
+         GROUP BY c.nombre_carrera
+         ORDER BY egresados DESC
+         LIMIT 6`,
     egresado.params
   );
 
@@ -273,15 +295,24 @@ export async function getAdminDashboard(filters: AdminDashboardFilters = {}) {
   );
 
   const [laboralRows] = await pool.query(
-    `SELECT es.estado_laboral AS name, COUNT(*) AS total
-     FROM encuesta_seguimiento es
-     INNER JOIN seguimiento_egresado se ON se.id_encuesta = es.id_encuesta
-     INNER JOIN egresado e ON e.id_usuario = se.id_egresado
-     INNER JOIN carrera c ON c.id_carrera = e.id_carrera
-     INNER JOIN facultad f ON f.id_facultad = c.id_facultad
-     ${encuesta.whereSql}
-     GROUP BY es.estado_laboral
-     ORDER BY total DESC`,
+    !hasFilters
+      ? `SELECT 'Empleado' AS name, COUNT(*) AS total
+         FROM vw_egresados_empleados
+         UNION ALL
+         SELECT es.estado_laboral AS name, COUNT(*) AS total
+         FROM encuesta_seguimiento es
+         WHERE es.estado_laboral <> 'Empleado'
+         GROUP BY es.estado_laboral
+         ORDER BY total DESC`
+      : `SELECT es.estado_laboral AS name, COUNT(*) AS total
+         FROM encuesta_seguimiento es
+         INNER JOIN seguimiento_egresado se ON se.id_encuesta = es.id_encuesta
+         INNER JOIN egresado e ON e.id_usuario = se.id_egresado
+         INNER JOIN carrera c ON c.id_carrera = e.id_carrera
+         INNER JOIN facultad f ON f.id_facultad = c.id_facultad
+         ${encuesta.whereSql}
+         GROUP BY es.estado_laboral
+         ORDER BY total DESC`,
     encuesta.params
   );
 
@@ -327,6 +358,16 @@ export async function getAdminDashboard(filters: AdminDashboardFilters = {}) {
     (sum, row) => sum + Number(row.total),
     0
   );
+  const [sampleEmpresaRows] = await pool.query("SELECT id_usuario FROM empresa ORDER BY id_usuario LIMIT 1");
+  const [sampleCarreraRows] = await pool.query(
+    `SELECT id_carrera
+     FROM carrera
+     ORDER BY CASE WHEN nombre_carrera = ? THEN 0 ELSE 1 END, id_carrera
+     LIMIT 1`,
+    [filters.carrera ?? ""]
+  );
+  const reportEmpresa = Number((sampleEmpresaRows as { id_usuario: number }[])[0]?.id_usuario ?? 0);
+  const reportCarrera = Number((sampleCarreraRows as { id_carrera: number }[])[0]?.id_carrera ?? 0);
 
   return {
     counts,
@@ -343,6 +384,24 @@ export async function getAdminDashboard(filters: AdminDashboardFilters = {}) {
       })),
       ofertasHistorial: ofertasHistRows,
       postulacionesEvolucion: postulacionesRows,
+    },
+    sqlReports: {
+      postulacionesPorEmpresa: reportEmpresa
+        ? await rows("CALL sp_postulaciones_por_empresa(?, ?)", [reportEmpresa, "Pendiente"])
+        : [],
+      egresadosPorCarrera: reportCarrera
+        ? await rows("CALL sp_egresados_por_carrera(?, ?)", [reportCarrera, "M"])
+        : [],
+      ofertasPorFacultad: await rows(
+        `SELECT f.nombre_facultad, c.nombre_carrera, o.titulo, o.puesto, o.estado_oferta
+         FROM facultad f
+         INNER JOIN carrera c ON f.id_facultad = c.id_facultad
+         INNER JOIN egresado e ON c.id_carrera = e.id_carrera
+         INNER JOIN postulacion p ON e.id_usuario = p.id_egresado
+         INNER JOIN oferta_laboral o ON p.id_oferta = o.id_oferta
+         WHERE o.estado_oferta = 'Activa'
+         LIMIT 20`
+      ),
     },
   };
 }

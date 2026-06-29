@@ -246,6 +246,49 @@ export type EgresadoDashboardData = {
   ofertasRecomendadas: AdminOferta[];
 };
 
+export type SqlEvidenceObject = {
+  name: string;
+  description: string;
+  category?: "numerica" | "texto" | "lectura" | "escritura";
+  usesJoins?: boolean;
+  usesFunctions?: boolean;
+  hasTwoParams?: boolean;
+  parameters?: string[];
+  restrictions?: string[];
+  table?: string;
+  action?: "INSERT" | "UPDATE" | "DELETE";
+  safeMode?: string;
+  realEndpoint?: string;
+  realUsage?: string;
+  backendFile?: string;
+};
+
+export type SqlEvidenceOverview = {
+  matrix: {
+    type: string;
+    required: number;
+    implemented: number;
+    screen: string;
+    endpoint: string;
+  }[];
+  views: SqlEvidenceObject[];
+  functions: SqlEvidenceObject[];
+  procedures: SqlEvidenceObject[];
+  auditTriggers: SqlEvidenceObject[];
+  signalTriggers: SqlEvidenceObject[];
+  roles: { role: string; user: string; permissions: string[] }[];
+  note: string;
+};
+
+export type SqlRunResult = {
+  object?: SqlEvidenceObject;
+  params?: unknown[];
+  result?: unknown;
+  rows?: Record<string, unknown>[];
+  message?: string;
+  ok?: boolean;
+};
+
 export class ApiError extends Error {
   status: number;
   reason?: string;
@@ -344,6 +387,14 @@ export const adminApi = {
   marcarTodasNotificacionesLeidas: () => apiSend<void>("PATCH", "/notificaciones/leer-todas"),
   crearNotificacion: (body: Pick<ApiNotificacion, "titulo" | "mensaje">) => apiSend<{ id_notificacion: number }>("POST", "/notificaciones", body),
   eliminarNotificacion: (id: number) => apiSend<void>("DELETE", `/notificaciones/${id}`),
+  sqlEvidencias: () => apiGet<SqlEvidenceOverview>("/admin/sql-evidencias"),
+  sqlVista: (name: string) => apiGet<SqlRunResult>(`/admin/sql-evidencias/vistas/${encodeURIComponent(name)}`),
+  ejecutarFuncionSql: (name: string) => apiSend<SqlRunResult>("POST", `/admin/sql-evidencias/funciones/${encodeURIComponent(name)}/run`),
+  ejecutarProcedimientoSql: (name: string) => apiSend<SqlRunResult>("POST", `/admin/sql-evidencias/procedimientos/${encodeURIComponent(name)}/run`),
+  auditoriaSqlReciente: () => apiGet<AdminAuditoria[]>("/admin/sql-evidencias/auditoria/reciente"),
+  auditoriaSqlProbar: () => apiSend<SqlRunResult>("POST", "/admin/sql-evidencias/auditoria/probar"),
+  probarSignalSql: (name: string) => apiSend<SqlRunResult>("POST", `/admin/sql-evidencias/signal/${encodeURIComponent(name)}/test`),
+  rolesSql: () => apiGet<{ roles: { role: string; user: string; permissions: string[] }[]; applicationAuth: { message: string; protectedEndpoint: string } }>("/admin/sql-evidencias/roles"),
 };
 
 export const empresaApi = {
