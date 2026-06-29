@@ -302,10 +302,21 @@ const EGRESADO_DASHBOARD_FALLBACK: EgresadoDashboardData = {
   ofertasRecomendadas: OFERTAS.filter(o => o.estado_oferta === "Activa").slice(0, 3),
 };
 const DEFAULT_PAGE_SIZE = 10;
-const CRUD_PHASE_MESSAGE = "Función disponible en la fase de CRUD.";
+const CRUD_PHASE_MESSAGE = "Acción no disponible para esta pantalla.";
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Ocurrió un error inesperado.";
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 type ToastVariant = "success" | "error" | "warning" | "info";
@@ -1599,10 +1610,12 @@ function AdminOfertas({ useApi = true, setScreen }: { useApi?: boolean; setScree
 
 // ─── ADMIN: Encuestas ─────────────────────────────────────────────────────────
 function AdminEncuestas() {
+  const { toast } = useFeedback();
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AdminEncuesta | null>(null);
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("Todos");
+  const [exporting, setExporting] = useState<"pdf" | "excel" | null>(null);
   const localEncuestas = (ENCUESTAS as AdminEncuesta[]).filter(e => {
     const q = search.toLowerCase();
     return `${e.egresado} ${e.nombre_empresa_actual ?? ""} ${e.cargo_actual ?? ""} ${e.area_trabajo ?? ""}`.toLowerCase().includes(q) && (estadoFiltro === "Todos" || e.estado_laboral === estadoFiltro);
@@ -1619,6 +1632,22 @@ function AdminEncuestas() {
   useEffect(() => {
     setPage(1);
   }, [search, estadoFiltro]);
+
+  async function exportEncuestas(format: "pdf" | "excel") {
+    setExporting(format);
+    try {
+      const params = { search, estadoLaboral: estadoFiltro };
+      const file = format === "pdf"
+        ? await adminApi.exportarEncuestasPdf(params)
+        : await adminApi.exportarEncuestasExcel(params);
+      downloadBlob(file.blob, file.filename);
+      toast("success", format === "pdf" ? "PDF generado correctamente." : "Excel generado correctamente.");
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    } finally {
+      setExporting(null);
+    }
+  }
 
   return (
     <div>
@@ -1642,7 +1671,20 @@ function AdminEncuestas() {
           </DetailSection>
         </DetailModal>
       )}
-      <PageHeader title="Gestión de Encuestas" subtitle={`${encuestasPage.total} encuestas respondidas`} action={<Btn variant="outline" onClick={unavailableCrudAction}><BarChart2 size={14} /> Generar Reporte</Btn>} />
+      <PageHeader
+        title="Gestión de Encuestas"
+        subtitle={`${encuestasPage.total} encuestas respondidas`}
+        action={
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn variant="outline" onClick={() => exportEncuestas("pdf")} disabled={exporting !== null}>
+              <Download size={14} /> {exporting === "pdf" ? "Generando..." : "Exportar PDF"}
+            </Btn>
+            <Btn variant="success" onClick={() => exportEncuestas("excel")} disabled={exporting !== null}>
+              <Download size={14} /> {exporting === "excel" ? "Generando..." : "Exportar Excel"}
+            </Btn>
+          </div>
+        }
+      />
       <Card>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #F1F5F9", display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", gap: 10, flex: 1 }}>
@@ -1686,10 +1728,12 @@ function AdminEncuestas() {
 
 // ─── ADMIN: Reportes ──────────────────────────────────────────────────────────
 function Reportes() {
+  const { toast } = useFeedback();
   const [facultadFiltro, setFacultadFiltro] = useState("Todas las facultades");
   const [carreraFiltro, setCarreraFiltro] = useState("Todas las carreras");
   const [anioFiltro, setAnioFiltro] = useState("Todos los años");
   const [estadoLaboralFiltro, setEstadoLaboralFiltro] = useState("Todos los estados laborales");
+  const [exporting, setExporting] = useState<"pdf" | "excel" | null>(null);
   const [appliedFilters, setAppliedFilters] = useState({
     facultad: "",
     carrera: "",
@@ -1717,6 +1761,21 @@ function Reportes() {
     });
   };
 
+  async function exportReportes(format: "pdf" | "excel") {
+    setExporting(format);
+    try {
+      const file = format === "pdf"
+        ? await adminApi.exportarReportePdf(appliedFilters)
+        : await adminApi.exportarReporteExcel(appliedFilters);
+      downloadBlob(file.blob, file.filename);
+      toast("success", format === "pdf" ? "PDF generado correctamente." : "Excel generado correctamente.");
+    } catch (error) {
+      toast("error", getErrorMessage(error));
+    } finally {
+      setExporting(null);
+    }
+  }
+
   useEffect(() => {
     if (carreraFiltro !== "Todas las carreras" && !carrerasDisponibles.includes(carreraFiltro)) {
       setCarreraFiltro("Todas las carreras");
@@ -1726,7 +1785,16 @@ function Reportes() {
   return (
     <div>
       <PageHeader title="Reportes y Estadísticas" subtitle="Información consolidada — Universidad de Huánuco (UDH)"
-        action={<div style={{ display: "flex", gap: 8 }}><Btn variant="outline" onClick={unavailableCrudAction}><Download size={14} /> Exportar PDF</Btn><Btn variant="success" onClick={unavailableCrudAction}><Download size={14} /> Exportar Excel</Btn></div>}
+        action={
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn variant="outline" onClick={() => exportReportes("pdf")} disabled={exporting !== null}>
+              <Download size={14} /> {exporting === "pdf" ? "Generando..." : "Exportar PDF"}
+            </Btn>
+            <Btn variant="success" onClick={() => exportReportes("excel")} disabled={exporting !== null}>
+              <Download size={14} /> {exporting === "excel" ? "Generando..." : "Exportar Excel"}
+            </Btn>
+          </div>
+        }
       />
       <Card style={{ padding: "16px 20px", marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>

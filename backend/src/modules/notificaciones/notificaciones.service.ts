@@ -159,6 +159,7 @@ export async function ensureEncuestaDisponibleNotificacion(idEgresado: number) {
     `SELECT
        es.id_encuesta,
        es.fecha_registro,
+       cfg.fecha_actualizacion AS configuracion_actualizada,
        DATE_ADD(es.fecha_registro, INTERVAL cfg.tiempo_entre_encuestas_meses MONTH) AS proxima_disponible,
        CASE
          WHEN cfg.tiempo_entre_encuestas_meses = 0 THEN 1
@@ -174,7 +175,13 @@ export async function ensureEncuestaDisponibleNotificacion(idEgresado: number) {
     [idEgresado]
   );
 
-  const encuesta = (rows as { id_encuesta: number; fecha_registro: string; proxima_disponible: string; can_submit: boolean | number }[])[0];
+  const encuesta = (rows as {
+    id_encuesta: number;
+    fecha_registro: string;
+    configuracion_actualizada: string;
+    proxima_disponible: string;
+    can_submit: boolean | number;
+  }[])[0];
   if (!encuesta || (encuesta.can_submit !== true && encuesta.can_submit !== 1)) {
     return { created: false as const };
   }
@@ -182,28 +189,32 @@ export async function ensureEncuestaDisponibleNotificacion(idEgresado: number) {
   const fechaDisponible = String(encuesta.proxima_disponible).slice(0, 19);
   const encuestaMensaje = `Tu encuesta de seguimiento está disponible desde ${fechaDisponible}. Referencia: ${encuesta.id_encuesta}.`;
 
-  return withAutomaticNotificationLock([idEgresado, "Encuesta disponible", encuesta.id_encuesta], async () => {
-    const [existingRows] = await pool.execute(
-      `SELECT id_notificacion
-       FROM notificacion
-       WHERE id_usuario = ?
-         AND titulo = 'Encuesta disponible'
-         AND mensaje = ?
-       LIMIT 1`,
-      [idEgresado, encuestaMensaje]
-    );
+  return withAutomaticNotificationLock(
+    [idEgresado, "Encuesta disponible", encuesta.id_encuesta, encuesta.configuracion_actualizada],
+    async () => {
+      const [existingRows] = await pool.execute(
+        `SELECT id_notificacion
+         FROM notificacion
+         WHERE id_usuario = ?
+           AND titulo = 'Encuesta disponible'
+           AND mensaje = ?
+           AND fecha_envio >= ?
+         LIMIT 1`,
+        [idEgresado, encuestaMensaje, encuesta.configuracion_actualizada]
+      );
 
-    if ((existingRows as unknown[]).length > 0) {
-      return { created: false as const };
+      if ((existingRows as unknown[]).length > 0) {
+        return { created: false as const };
+      }
+
+      const result = await createNotificacion(idEgresado, {
+        titulo: "Encuesta disponible",
+        mensaje: encuestaMensaje,
+      });
+
+      return { created: true as const, result };
     }
-
-    const result = await createNotificacion(idEgresado, {
-      titulo: "Encuesta disponible",
-      mensaje: encuestaMensaje,
-    });
-
-    return { created: true as const, result };
-  });
+  );
 }
 
 export async function listNotificaciones(

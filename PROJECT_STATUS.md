@@ -32,10 +32,12 @@ Estado aprobado al 2026-06-26:
 - CRUD Administrador Fase B implementado: ofertas admin ya pueden crearse para empresas activas y notificaciones admin tienen crear/listar/marcar/eliminar.
 - Eventos automaticos y notificaciones del sistema implementados: postulaciones, cierre/reactivacion de ofertas, desactivacion/reactivacion de cuentas y disponibilidad de encuestas generan notificaciones reales sin WebSockets y con deduplicacion.
 - Flujo de lectura y visualizacion de notificaciones corregido: la app valida la sesion guardada con `/api/auth/me`, el modulo Notificaciones no muestra fallback mock cuando hay API real, `GET /api/notificaciones` y `unread-count` se verificaron por JWT para admin/empresa/egresado, y los filtros de leidas/no leidas funcionan con o sin tilde.
-- Estrategia de deduplicacion de notificaciones automaticas corregida: los eventos operativos ya no quedan bloqueados por 24 horas ni por texto repetido con eventos intermedios; solo se bloquea una notificacion equivalente reciente si sigue siendo la ultima del usuario, con bloqueo concurrente por `GET_LOCK`. Encuesta disponible deduplica por referencia de `id_encuesta`, sin impedir disponibilidades posteriores del mismo dia.
+- Estrategia de deduplicacion de notificaciones automaticas corregida: los eventos operativos ya no quedan bloqueados por 24 horas ni por texto repetido con eventos intermedios; solo se bloquea una notificacion equivalente reciente si sigue siendo la ultima del usuario, con bloqueo concurrente por `GET_LOCK`. Encuesta disponible deduplica por `id_encuesta` y `configuracion_sistema.fecha_actualizacion`, sin duplicar por recargas y permitiendo nuevas disponibilidades causadas por cambios administrativos.
 - QA Final iniciado y ejecutado sobre los tres roles: se corrigieron detalles pequenos de UI/UX sin modificar `Database/`, sin crear tablas y sin reescribir modulos.
 - Modulo administrativo `Evidencias SQL` implementado para demostrar vistas, funciones, procedimientos, auditoria, triggers SIGNAL y roles MySQL con endpoints controlados solo para administrador.
 - Objetos SQL avanzados integrados en flujos reales seguros: vistas en listados/reportes, funciones en KPIs y nombres calculados, y procedimientos no destructivos con `CALL` dentro de operaciones existentes.
+- Exportacion real de reportes administrativos y gestion de encuestas a PDF/Excel implementada con endpoints protegidos para administrador.
+- Presentacion institucional de reportes PDF/Excel mejorada con logo UDH, portada, encabezados/pies, tablas formateadas y estilos profesionales.
 
 ## Fases Implementadas
 
@@ -979,10 +981,11 @@ Verificación realizada:
 - Revision final UTF-8 ejecutada en backend, frontend y datos visibles de los tres roles; no hay caracteres corruptos pendientes ni problema general de codificacion detectado.
 - Modulo administrativo de Evidencias SQL implementado para el rol administrador.
 - Vistas, funciones y procedimientos SQL avanzados integrados operativamente en endpoints reales seguros.
+- Exportacion real de reportes administrativos a PDF y Excel.
+- Exportacion real de gestion de encuestas a PDF y Excel.
 
 ## Funcionalidades Pendientes
 
-- Exportacion real de reportes a PDF/Excel.
 - Recuperacion automatica de contrasena con envio real de correo/token.
 - Validacion de entrada por modulo.
 - Proteccion de permisos por propietario del recurso para modulos pendientes fuera de Empresa y Egresado.
@@ -1000,6 +1003,41 @@ Objetivo:
 - No hacer esta fase antes de integrar datos reales suficientes.
 
 ## Estado Actual
+
+Fecha: 2026-06-29.
+
+Fase: mejora visual institucional de reportes PDF y Excel.
+
+Estado:
+
+- Se leyeron `AI_CONTEXT.md`, `PROJECT_STATUS.md` y el modulo de reportes/dashboard/encuestas antes de modificar.
+- No se modifico `Database/`.
+- Se mantuvieron exactamente los endpoints existentes `GET /api/admin/reportes/export/pdf` y `GET /api/admin/reportes/export/excel`.
+- No se cambiaron consultas SQL, estructura de datos, filtros, autenticacion ni permisos.
+- El PDF ahora usa portada institucional, logo UDH, encabezado/pie por pagina, colores verde/dorado, recuadro de filtros, resumen y tablas con encabezado verde, texto blanco, filas alternadas y division automatica de columnas anchas.
+- El Excel mantiene las hojas `Resumen` y `Datos`, agrega logo, estilos institucionales, encabezados verdes con texto blanco, bordes, filas alternadas, autofiltro, fila congelada y formatos para moneda/fechas.
+- Correccion visual puntual: el PDF ya no emite texto con BOM UTF-16 dentro de Helvetica, por lo que desaparecen cuadritos/simbolos antes de textos y se conservan acentos como `Huánuco`, `Gestión`, `Búsqueda` y `Página`; el logo del Excel se inserta con proporcion original mediante `oneCellAnchor`.
+- No se modificaron CRUD, Dashboard, Evidencias SQL, autenticacion ni permisos existentes.
+
+Verificacion:
+
+- `npm.cmd run build` en `backend`: exitoso.
+- `npm.cmd run build` en frontend raiz: exitoso; Vite solo reporto advertencia de chunk grande.
+- Prueba HTTP real: PDF de Gestion de Encuestas con filtro de estado laboral respondio `200`, `application/pdf`, cabecera `%PDF`, logo embebido como XObject y color institucional verde en el contenido.
+- Prueba HTTP real: Excel de Gestion de Encuestas con filtro de estado laboral respondio `200`, `.xlsx`, cabecera ZIP `PK`, logo embebido en `xl/media`, estilos, drawing, autofiltro y fila congelada.
+- Prueba HTTP real: PDF de Gestion de Encuestas generado sin `feff`; inspeccion del stream confirmo texto Latin-1 para `Universidad de Huánuco`, `Gestión de Encuestas` y `Página`.
+- Prueba HTTP real: Excel de Gestion de Encuestas genero `oneCellAnchor` para el logo con ratio `0.99553567`, equivalente al ratio real del logo `0.99553571`.
+- Verificacion funcional previa de los mismos endpoints confirmo PDF/Excel sin filtros y con filtros, Reportes Administrativos, Gestion de Encuestas y 403 para empresa/egresado.
+- `npm.cmd run build` en `backend`: exitoso.
+- `git status --short -- Database`: sin cambios.
+
+Archivos modificados:
+
+- `backend/src/utils/report-export.ts`
+- `AI_CONTEXT.md`
+- `PROJECT_STATUS.md`
+
+## Estado Anterior
 
 Fecha: 2026-06-28.
 

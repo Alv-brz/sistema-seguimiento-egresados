@@ -360,8 +360,48 @@ export async function apiSend<T>(
   return "data" in payload ? payload.data : (undefined as T);
 }
 
+function filenameFromDisposition(disposition: string | null, fallback: string) {
+  if (!disposition) return fallback;
+  const utfMatch = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+  if (utfMatch?.[1]) return decodeURIComponent(utfMatch[1]);
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  return match?.[1] ?? fallback;
+}
+
+async function apiDownload(path: string, params?: Record<string, string | number | undefined>, fallbackName = "reporte") {
+  const query = new URLSearchParams();
+  Object.entries(params ?? {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") {
+      query.set(key, String(value));
+    }
+  });
+
+  const url = `${API_BASE_URL}${path}${query.size > 0 ? `?${query.toString()}` : ""}`;
+  const response = await fetch(url, { headers: buildHeaders() });
+
+  if (!response.ok) {
+    let message = "Error al descargar el archivo.";
+    try {
+      const payload = (await response.json()) as ApiFailure;
+      message = payload.error ?? payload.reason ?? message;
+    } catch {
+      // La respuesta puede no ser JSON si falla antes del controlador.
+    }
+    throw new ApiError(response.status, message);
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: filenameFromDisposition(response.headers.get("Content-Disposition"), fallbackName),
+  };
+}
+
 export const adminApi = {
   dashboard: (params?: Pick<ListParams, "facultad" | "carrera" | "anio" | "estadoLaboral">) => apiGet<AdminDashboardData>("/admin/dashboard", params),
+  exportarReportePdf: (params?: Pick<ListParams, "facultad" | "carrera" | "anio" | "estadoLaboral">) => apiDownload("/admin/reportes/export/pdf", { tipo: "administrativo", ...params }, "reportes-administrativos.pdf"),
+  exportarReporteExcel: (params?: Pick<ListParams, "facultad" | "carrera" | "anio" | "estadoLaboral">) => apiDownload("/admin/reportes/export/excel", { tipo: "administrativo", ...params }, "reportes-administrativos.xlsx"),
+  exportarEncuestasPdf: (params?: Pick<ListParams, "search" | "estadoLaboral">) => apiDownload("/admin/reportes/export/pdf", { tipo: "encuestas", ...params }, "gestion-encuestas.pdf"),
+  exportarEncuestasExcel: (params?: Pick<ListParams, "search" | "estadoLaboral">) => apiDownload("/admin/reportes/export/excel", { tipo: "encuestas", ...params }, "gestion-encuestas.xlsx"),
   egresados: (params?: ListParams) => apiGet<PaginatedResponse<AdminEgresado>>("/egresados", params),
   crearEgresado: (body: Record<string, unknown>) => apiSend<{ id_usuario: number }>("POST", "/egresados", body),
   actualizarEgresado: (id: number, body: Record<string, unknown>) => apiSend<void>("PUT", `/egresados/${id}`, body),

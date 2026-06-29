@@ -122,6 +122,8 @@ El backend es una API REST modular bajo `/api`:
 - `POST /api/auth/login`: valida usuario/password contra MySQL.
 - `GET /api/auth/me`: valida JWT Bearer y reconstruye la sesion desde MySQL.
 - `GET /api/admin/dashboard`: resumen y graficos del administrador desde MySQL. Acepta filtros opcionales `facultad`, `carrera`, `anio` y `estadoLaboral` para Reportes y Estadisticas.
+- `GET /api/admin/reportes/export/pdf`: exporta PDF real para reportes administrativos o gestion de encuestas, protegido con JWT y rol administrador.
+- `GET /api/admin/reportes/export/excel`: exporta Excel `.xlsx` real para reportes administrativos o gestion de encuestas, protegido con JWT y rol administrador.
 - `GET /api/admin/configuracion`: lee `configuracion_sistema` con `id_configuracion = 1`.
 - `PUT /api/admin/configuracion`: actualiza parametros globales de `configuracion_sistema`.
 - `GET /api/egresados`: listado de lectura para gestion admin de egresados.
@@ -211,6 +213,7 @@ La capa frontend reutilizable esta en `src/app/api.ts`:
 - Lee el token desde `readStoredSession()`.
 - Envia `Authorization: Bearer <token>` cuando existe sesion.
 - Expone `adminApi` para dashboard, egresados, empresas, ofertas, encuestas, auditoria y notificaciones.
+- Expone `adminApi.exportarReportePdf`, `adminApi.exportarReporteExcel`, `adminApi.exportarEncuestasPdf` y `adminApi.exportarEncuestasExcel` para descargas autenticadas de archivos.
 - Expone `empresaApi` para dashboard, ofertas, postulaciones, perfil y notificaciones de empresa.
 - Expone `egresadoApi` para dashboard, bolsa laboral, postulaciones, perfil, historial, encuesta y notificaciones de egresado.
 - Expone `notificacionesNoLeidas` para administrador, empresa y egresado mediante `GET /api/notificaciones/unread-count`.
@@ -225,6 +228,9 @@ La capa frontend reutilizable esta en `src/app/api.ts`:
 - Filtros utiles actuales: egresados por carrera/estado de usuario; empresas por sector/estado de usuario; ofertas por estado/modalidad; postulaciones por estado; encuestas por estado laboral; auditoria por accion/tabla afectada; notificaciones por todas/leidas/no leidas; historial laboral por actual/no actual.
 - La pantalla Dashboard de administrador consume `/api/admin/dashboard` sin filtros y no debe usar textos tecnicos visibles en KPIs o titulos de graficos.
 - La pantalla Reportes y Estadisticas consume `/api/admin/dashboard` con filtros aplicados por boton: facultad, carrera, anio y estado laboral. Los KPIs y graficos deben actualizarse con la respuesta filtrada y mostrar estado vacio si no hay datos.
+- Reportes y Estadisticas exporta PDF/Excel con los mismos filtros aplicados en pantalla mediante `/api/admin/reportes/export/pdf|excel?tipo=administrativo`.
+- Gestion de Encuestas exporta PDF/Excel con los mismos filtros de busqueda y estado laboral mediante `/api/admin/reportes/export/pdf|excel?tipo=encuestas`.
+- Los reportes exportados usan presentacion institucional: logo UDH desde `Public/udh-logo.png`, portada PDF, encabezado/pie por pagina, colores verde/dorado, tablas paginadas y Excel con hojas `Resumen`/`Datos`, estilos, autofiltro y fila congelada. El PDF escribe texto compatible con WinAnsi/Latin-1 para conservar acentos visibles y el Excel inserta el logo con proporcion original.
 
 ## Modelo de Autenticacion
 
@@ -375,6 +381,7 @@ Backend implementado:
 - `health`: verificacion de API y DB.
 - `auth`: login, JWT, middleware de autorizacion y reconstruccion de sesion.
 - `admin-dashboard`: metricas y graficos de lectura para admin.
+- `admin-reportes`: exportacion real de reportes administrativos y gestion de encuestas a PDF/Excel para administradores.
 - `admin-configuracion`: lectura y actualizacion de `configuracion_sistema`.
 - `egresados`: listado admin de egresados con usuario, carrera y facultad.
 - `empresas`: listado admin de empresas con correo/estado de usuario.
@@ -389,9 +396,7 @@ Backend implementado:
 
 Backend pendiente:
 
-- Modulos REST para reportes especificos no cubiertos por dashboard.
 - Escrituras de Administrador Fase B no cubiertas por la Fase A.
-- Reportes especificos fuera de dashboard.
 - Validaciones de entrada formales para modulos pendientes fuera de Empresa y Egresado.
 - Manejo de permisos por entidad fuera de los CRUD Empresa y Egresado ya implementados.
 
@@ -488,7 +493,7 @@ Base de datos:
 - Historial laboral valida salario no negativo, fechas coherentes y propiedad por `id_egresado`.
 - Encuesta de seguimiento respeta `configuracion_sistema.tiempo_entre_encuestas_meses`; `0` permite responder inmediatamente.
 - Notificaciones permite marcar una o todas como leidas para el usuario autenticado y actualiza el contador real del badge.
-- Las notificaciones automaticas se crean desde backend con helpers en `backend/src/modules/notificaciones/notificaciones.service.ts`; siempre se asignan al `id_usuario` destinatario. Para eventos operativos como postulaciones, cierre/reactivacion de ofertas y activacion/desactivacion de cuentas, la deduplicacion bloquea solo si una notificacion equivalente por `id_usuario + titulo + mensaje` fue creada en los ultimos 30 segundos y sigue siendo la ultima notificacion del usuario; si hubo un evento intermedio, el mismo texto puede volver a notificarse como evento legitimo. La ventana se calcula en MySQL con `DATE_SUB(NOW(), INTERVAL ? SECOND)` y la decision se serializa con `GET_LOCK` para proteger dobles peticiones concurrentes. Para encuesta disponible, la deduplicacion usa la encuesta vigente como clave de evento: el mensaje incluye `Referencia: <id_encuesta>` y se bloquea solo si ya existe esa misma notificacion de encuesta, permitiendo una nueva disponibilidad legitima aunque ocurra el mismo dia.
+- Las notificaciones automaticas se crean desde backend con helpers en `backend/src/modules/notificaciones/notificaciones.service.ts`; siempre se asignan al `id_usuario` destinatario. Para eventos operativos como postulaciones, cierre/reactivacion de ofertas y activacion/desactivacion de cuentas, la deduplicacion bloquea solo si una notificacion equivalente por `id_usuario + titulo + mensaje` fue creada en los ultimos 30 segundos y sigue siendo la ultima notificacion del usuario; si hubo un evento intermedio, el mismo texto puede volver a notificarse como evento legitimo. La ventana se calcula en MySQL con `DATE_SUB(NOW(), INTERVAL ? SECOND)` y la decision se serializa con `GET_LOCK` para proteger dobles peticiones concurrentes. Para encuesta disponible, la deduplicacion usa la encuesta vigente y el ciclo de configuracion como clave de evento: se consulta `configuracion_sistema.fecha_actualizacion`, se bloquea por `id_egresado + Encuesta disponible + id_encuesta + fecha_actualizacion`, y solo se considera duplicada una notificacion enviada desde esa actualizacion de configuracion. Asi las recargas no duplican, un nuevo cambio administrativo que vuelve a habilitar la encuesta genera una notificacion nueva, y los ciclos temporales posteriores no quedan bloqueados porque una encuesta respondida crea una nueva referencia `id_encuesta`.
 - `GET /api/notificaciones` y `GET /api/notificaciones/unread-count` siempre usan `res.locals.auth.id_usuario`; no aceptan ids enviados por cliente para listar o contar. Los filtros de notificaciones aceptan `Todas`, `Leidas/Leídas` y `No leidas/No leídas`, y el listado devuelve `leido` normalizado como `0` o `1`.
 - La pantalla frontend de Notificaciones no usa datos mock como fallback cuando `useApi=true`; si el endpoint falla, no sustituye la respuesta por otro estado local. El contador del sidebar y el listado se refrescan desde los mismos endpoints reales despues de marcar una o todas como leidas.
 - QA Final corrigio detalles pequenos de interfaz sin cambiar arquitectura: el sidebar/topbar muestran el `nombre_usuario` de la sesion real en vez de nombres demo fijos, el titulo superior de Empresa muestra `Mis Ofertas` cuando reutiliza la pantalla interna `admin-ofertas`, los enlaces de pagina web de empresas ya apuntan a una URL real y los botones visuales dentro de formularios usan `type="button"` para no disparar guardados involuntarios.
@@ -498,6 +503,7 @@ Base de datos:
 - El badge rojo del menu de notificaciones usa el contador real de no leidas y se oculta cuando el contador es 0.
 - Los errores SQL `SIGNAL` se traducen a HTTP 422, duplicados a 409 e integridad referencial a 409.
 - El panel `Evidencias SQL` esta disponible solo para rol administrador. Usa endpoints controlados bajo `/api/admin/sql-evidencias`, consulta objetos reales definidos en `Database/`, no modifica scripts SQL, no crea tablas y no permite SQL arbitrario desde frontend.
+- La exportacion de reportes esta disponible solo para rol administrador. Genera PDF y XLSX desde backend sin modificar `Database/`, reutilizando `getAdminDashboard` y la consulta real de encuestas; empresa y egresado reciben `403`.
 - Las pruebas de procedimientos de escritura, auditoria y SIGNAL usan datos temporales y transacciones revertidas con `ROLLBACK` para no dañar datos reales. La auditoria reciente se muestra desde la tabla `auditoria`.
 - Los objetos SQL avanzados ya no quedan solo en `Evidencias SQL`: vistas, funciones y procedimientos seguros se consumen tambien desde endpoints operativos. Las vistas alimentan listados/reportes (`egresados`, `ofertas`, `postulaciones`, `historial`, `encuestas`, `dashboard`). Las funciones alimentan KPIs y nombres calculados. Los procedimientos no destructivos se invocan con `CALL` en flujos reales y se complementan con SQL parametrizado cuando no cubren todos los campos actuales.
 - Procedimientos integrados con `CALL` en flujos reales y mostrados en `Evidencias SQL`: `sp_registrar_empresa`, `sp_actualizar_empresa`, `sp_registrar_egresado`, `sp_actualizar_egresado`, `sp_cambiar_estado_egresado_seguro`, `sp_cambiar_estado_empresa_seguro`, `sp_publicar_oferta`, `sp_actualizar_oferta`, `sp_cerrar_oferta`, `sp_registrar_postulacion`, `sp_cambiar_estado_postulacion`, `sp_registrar_encuesta`, `sp_asociar_encuesta_egresado`, `sp_postulaciones_por_empresa` y `sp_egresados_por_carrera`.
