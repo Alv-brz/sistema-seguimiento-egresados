@@ -4,6 +4,7 @@ import { getExactFilter, getStringFilter } from "../../utils/pagination.js";
 import { exportAdminReport, type ExportFormat, type ReportKind } from "./admin-reportes.service.js";
 
 function parseKind(value: unknown): ReportKind {
+  if (value === "estadisticas") return "estadisticas";
   return value === "encuestas" ? "encuestas" : "administrativo";
 }
 
