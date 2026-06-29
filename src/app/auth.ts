@@ -24,7 +24,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:3001/api
 const DEMO_CREDENTIALS: Record<AuthRole, DemoCredentials> = {
   admin: { nombre_usuario: "admin.general001", password: "Admin123*" },
   empresa: { nombre_usuario: "finanzasugartes14768", password: "%0r1MFj6Qp" },
-  egresado: { nombre_usuario: "bartolomé.vicente85683", password: "&19LW%iOD&" },
+  egresado: { nombre_usuario: "florencia.montesinos46177", password: "(2&Jj5&+IH" },
 };
 
 export async function authenticateUser(

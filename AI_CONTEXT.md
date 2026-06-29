@@ -241,7 +241,7 @@ Frontend:
 - Credenciales demo:
   - admin: `admin.general001` / `Admin123*`
   - empresa: `finanzasugartes14768` / `%0r1MFj6Qp`
-  - egresado: `bartolomé.vicente85683` / `&19LW%iOD&`
+  - egresado: `florencia.montesinos46177` / `(2&Jj5&+IH`
 - La sesion guardada debe cumplir:
   - `id_usuario: number`
   - `nombre_usuario: string`

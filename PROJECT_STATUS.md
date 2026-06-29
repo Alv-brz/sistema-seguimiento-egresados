@@ -1059,7 +1059,7 @@ Verificacion:
 - `npm.cmd run build` en `backend`: exitoso.
 - `npm.cmd run build` en frontend raiz: exitoso.
 - API health responde con DB conectada.
-- Login admin y empresa verificado; login egresado verificado con credencial activa alternativa `florencia.montesinos46177`.
+- Login admin y empresa verificado; login egresado verificado con credencial activa `florencia.montesinos46177` / `(2&Jj5&+IH`.
 - `GET /api/admin/sql-evidencias` con admin responde matriz esperada: Vistas 10/10, Funciones 10/10, Procedimientos 15/15, Auditoria 10/10, SIGNAL 15/15, Roles 3/3.
 - Empresa y egresado reciben 403 al acceder a `/api/admin/sql-evidencias`.
 - `PATCH /api/egresados/:id/estado` probado y restaurado con egresado real.

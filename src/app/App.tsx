@@ -771,7 +771,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
   const DEMOS: { role: Role; label: string; desc: string; icon: React.ReactNode }[] = [
     { role: "admin", label: "Administrador", desc: "admin.general001 — Gestión total", icon: <Settings size={15} /> },
     { role: "empresa", label: "Empresa", desc: "Finanzas Ugarte S.R.L. — Publicar ofertas", icon: <Building2 size={15} /> },
-    { role: "egresado", label: "Egresado", desc: "bartolomé.vicente85683 — Bolsa laboral", icon: <GraduationCap size={15} /> },
+    { role: "egresado", label: "Egresado", desc: "florencia.montesinos46177 — Bolsa laboral", icon: <GraduationCap size={15} /> },
   ];
 
   async function handleSubmit() {
@@ -2365,7 +2365,7 @@ function EmpresaDashboard({ setScreen }: { setScreen: (s: Screen) => void }) {
   );
 }
 
-function CrearOferta() {
+function CrearOferta({ setScreen }: { setScreen: (s: Screen) => void }) {
   const { toast } = useFeedback();
   const [saving, setSaving] = useState(false);
 
@@ -2429,7 +2429,7 @@ function CrearOferta() {
         </div>
         <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
           <button type="submit" disabled={saving} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{saving ? "Publicando..." : "Publicar Oferta"}</button>
-          <Btn variant="outline" onClick={unavailableCrudAction}>Cancelar</Btn>
+          <Btn variant="outline" onClick={() => setScreen("admin-ofertas")} disabled={saving}>Cancelar</Btn>
         </div>
         </form>
       </Card>
@@ -2532,6 +2532,7 @@ function PerfilEmpresa() {
   const { toast } = useFeedback();
   const profile = useApiData(true, empresaApi.perfil, EMPRESAS[0] as AdminEmpresa | null) ?? EMPRESAS[0];
   const [saving, setSaving] = useState(false);
+  const [formVersion, setFormVersion] = useState(0);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2558,11 +2559,11 @@ function PerfilEmpresa() {
   return (
     <div>
       <PageHeader title="Perfil de Empresa" subtitle="Datos públicos y de contacto de la empresa." />
-      <Card key={profile.id_usuario} style={{ padding: 32, maxWidth: 820 }}>
+      <Card key={`${profile.id_usuario}-${formVersion}`} style={{ padding: 32, maxWidth: 820 }}>
         <form onSubmit={handleSubmit}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-          <FormField label="RUC" required hint="11 dígitos."><input style={INP} defaultValue={profile.ruc} maxLength={11} /></FormField>
-          <FormField label="Razón social" required><input style={INP} defaultValue={profile.razon_social} /></FormField>
+          <FormField label="RUC" required hint="11 dígitos."><input style={INP} defaultValue={profile.ruc} maxLength={11} readOnly /></FormField>
+          <FormField label="Razón social" required><input style={INP} defaultValue={profile.razon_social} readOnly /></FormField>
           <FormField label="Nombre comercial"><input name="nombre_comercial" style={INP} defaultValue={profile.nombre_comercial ?? ""} /></FormField>
           <FormField label="Sector" required>
             <select name="sector" style={INP} defaultValue={profile.sector}>{["Salud", "Tecnología", "Finanzas", "Industrial", "Retail", "Educación", "Telecomunicaciones", profile.sector].filter((s, i, arr) => arr.indexOf(s) === i).map(s => <option key={s}>{s}</option>)}</select>
@@ -2580,7 +2581,7 @@ function PerfilEmpresa() {
         </div>
         <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
           <button type="submit" disabled={saving} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{saving ? "Guardando..." : "Guardar Cambios"}</button>
-          <Btn variant="outline" onClick={unavailableCrudAction}>Cancelar</Btn>
+          <Btn variant="outline" onClick={() => setFormVersion(version => version + 1)} disabled={saving}>Cancelar</Btn>
         </div>
         </form>
       </Card>
@@ -2848,6 +2849,7 @@ function MiPerfil() {
   const { toast } = useFeedback();
   const [refreshKey, setRefreshKey] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [formVersion, setFormVersion] = useState(0);
   const loadProfile = useCallback(() => {
     void refreshKey;
     return egresadoApi.perfil();
@@ -2890,7 +2892,7 @@ function MiPerfil() {
   return (
     <div>
       <PageHeader title="Mi Perfil" subtitle="Datos personales, académicos y de contacto." />
-      <Card key={profile.id_usuario} style={{ padding: 32, maxWidth: 820 }}>
+      <Card key={`${profile.id_usuario}-${formVersion}`} style={{ padding: 32, maxWidth: 820 }}>
         <form onSubmit={handleSubmit}>
         <div style={{ display: "flex", gap: 24, alignItems: "flex-start", marginBottom: 28, paddingBottom: 24, borderBottom: "1px solid #F1F5F9" }}>
           <div style={{ flexShrink: 0 }}>
@@ -2945,7 +2947,7 @@ function MiPerfil() {
 
         <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid #F1F5F9", display: "flex", gap: 10 }}>
           <button type="submit" disabled={saving} style={{ padding: "11px 26px", background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.65 : 1 }}>{saving ? "Actualizando..." : "Actualizar Perfil"}</button>
-          <Btn variant="outline" onClick={unavailableCrudAction}>Cancelar</Btn>
+          <Btn variant="outline" onClick={() => setFormVersion(version => version + 1)} disabled={saving}>Cancelar</Btn>
         </div>
         </form>
       </Card>
@@ -3730,7 +3732,7 @@ function AppContent() {
       case "admin-auditoria": return <Auditoria />;
       case "admin-sql-evidencias": return <SqlEvidencias />;
       case "emp-dashboard": return <EmpresaDashboard setScreen={setScreen} />;
-      case "emp-crear-oferta": return <CrearOferta />;
+      case "emp-crear-oferta": return <CrearOferta setScreen={setScreen} />;
       case "emp-postulaciones": return <PostulacionesRecibidas />;
       case "emp-perfil": return <PerfilEmpresa />;
       case "egr-dashboard": return <EgresadoDashboard setScreen={setScreen} />;
