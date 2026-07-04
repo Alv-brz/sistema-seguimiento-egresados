@@ -4,3 +4,6 @@ dist/
 .vscode/
 tmp/
 *.log
+AI_CONTEXT.md
+PROJECT_STATUS.md
+ATTRIBUTIONS.md
