@@ -1,266 +1,289 @@
-# AI Context - Sistema de Seguimiento de Egresados y Bolsa de Trabajo
+# Sistema de Seguimiento de Egresados y Bolsa de Trabajo
 
-## Descripción del Proyecto
+## Descripción
 
-Sistema web desarrollado para la Universidad de Huánuco (UDH) orientado al seguimiento de egresados y la gestión de bolsa de trabajo institucional.
+El Sistema de Seguimiento de Egresados y Bolsa de Trabajo es una aplicación web desarrollada para la Universidad de Huánuco (UDH), orientada a fortalecer el vínculo entre la universidad, sus egresados y las empresas.
 
-El sistema integra:
-
-- Frontend React + Vite + TypeScript
-- Backend Node.js + Express + TypeScript
-- Base de datos MySQL
-- Objetos SQL avanzados
-- Reportes PDF y Excel
-- Autenticación JWT
-- Control de acceso por roles
+La plataforma permite gestionar información de egresados, empresas, ofertas laborales, postulaciones, encuestas de seguimiento y reportes institucionales, incorporando una base de datos con procedimientos almacenados, funciones, vistas y triggers para garantizar la integridad y automatización de los procesos.
 
 ---
 
-# Objetivo
+# Características
 
-Centralizar el seguimiento de egresados, conectar empresas con profesionales egresados y generar información estadística mediante dashboards y reportes institucionales.
-
----
-
-# Roles
-
-Administrador
-
-Puede:
-
-- Administrar egresados
-- Administrar empresas
-- Administrar ofertas
-- Consultar auditoría
-- Configuración del sistema
-- Evidencias SQL
-- Exportar PDF y Excel
-- Ver dashboards
-
-Empresa
-
-Puede:
-
-- Administrar sus ofertas
-- Gestionar postulaciones
-- Editar perfil
-- Ver dashboard propio
-- Recibir notificaciones
-
-Egresado
-
-Puede:
-
-- Buscar ofertas
-- Postular
-- Completar encuestas
-- Editar perfil
-- Historial laboral
-- Dashboard personal
+- Gestión de egresados.
+- Gestión de empresas.
+- Gestión de ofertas laborales.
+- Gestión de postulaciones.
+- Encuestas de seguimiento.
+- Historial laboral.
+- Dashboard con indicadores.
+- Reportes en PDF, Excel y CSV.
+- Autenticación mediante JWT.
+- Control de acceso por roles.
+- Auditoría automática mediante triggers.
+- Procedimientos almacenados para operaciones de negocio.
+- Funciones y vistas SQL para consultas avanzadas.
 
 ---
 
 # Arquitectura
 
-Frontend
-
-React
-Vite
-TypeScript
-Tailwind
-shadcn/ui
-
-↓
-
-API REST
-
-↓
-
-Express
-
-↓
-
-Controllers
-
-↓
-
-Services
-
-↓
-
-MySQL
-
-↓
-
-Triggers
-Funciones
-Procedimientos
-Vistas
+```
+Frontend (React + TypeScript)
+            │
+            ▼
+      API REST (Express)
+            │
+            ▼
+     Servicios y Controladores
+            │
+            ▼
+          MySQL
+            │
+            ▼
+Procedimientos • Funciones • Vistas • Triggers
+```
 
 ---
 
-# Tecnologías
+# Tecnologías Utilizadas
 
-Frontend
+## Frontend
 
 - React
 - TypeScript
-- TailwindCSS
 - Vite
+- Tailwind CSS
 - shadcn/ui
 
-Backend
+## Backend
 
 - Node.js
 - Express
 - TypeScript
 - JWT
 
-Base de datos
+## Base de Datos
 
 - MySQL
 
-Reportes
+## Reportes
 
 - PDF
 - Excel
+- CSV
 
 ---
 
-# Objetos SQL
+# Estructura del Proyecto
 
-El proyecto utiliza
-
-- 10 vistas
-- 10 funciones
-- 14 procedimientos almacenados
-- 10 triggers de auditoría
-- 15 triggers SIGNAL
-- Roles MySQL
-- Configuración del sistema
-
-Los procedimientos almacenados son utilizados desde el backend mediante CALL.
-
-Las validaciones de negocio importantes se realizan mediante triggers SIGNAL.
-
-La auditoría es automática mediante triggers.
-
----
-
-# Seguridad
-
-Autenticación JWT.
-
-Middleware:
-
-- requireAuth
-- requireRole
-
-Roles:
-
-- admin
-- empresa
-- egresado
-
-El JWT almacena:
-
-- id_usuario
-- role
-
----
-
-# Reportes
-
-Actualmente soporta:
-
-- PDF institucional
-- Excel institucional
-
-Los reportes contienen:
-
-- Logo UDH
-- Encabezado institucional
-- Resumen ejecutivo
-- Tablas
-- Estadísticas
-- Dashboards
-
----
-
-# Flujo General
-
-Usuario
-
-↓
-
-Pantalla React
-
-↓
-
-api.ts
-
-↓
-
-Express
-
-↓
-
-Controller
-
-↓
-
-Service
-
-↓
-
-SQL
-
-↓
-
-Triggers
-
-↓
-
-Respuesta JSON
-
----
-
-# Convenciones del Proyecto
-
-Mantener arquitectura por módulos.
-
-No mezclar lógica SQL con componentes React.
-
-Los procedimientos almacenados son la primera opción para operaciones complejas.
-
-Las validaciones críticas deben permanecer en MySQL mediante SIGNAL.
-
-Los triggers de auditoría nunca deben eliminarse.
-
----
-
-# Organización
-
-Frontend
+```
+backend/
+    API REST
 
 src/
-
-Backend
-
-backend/src/
-
-Base de datos
+    Frontend React
 
 Database/
+    Scripts SQL
 
-Documentación
+Public/
+    Recursos públicos
 
 Docs/
+    Documentación técnica
+```
 
 ---
 
-# Estado General
+# Instalación
 
-Proyecto terminado.
+## 1. Clonar el repositorio
 
-Se mantiene únicamente mantenimiento correctivo, mejoras visuales y optimizaciones sin alterar la arquitectura principal.
+```bash
+git clone https://github.com/Alv-brz/sistema-seguimiento-egresados.git
+cd sistema-seguimiento-egresados
+```
+
+---
+
+## 2. Instalar dependencias
+
+### Frontend
+
+```bash
+npm install
+```
+
+### Backend
+
+```bash
+cd backend
+npm install
+cd ..
+```
+
+---
+
+## 3. Configurar la Base de Datos
+
+Crear una base de datos MySQL e importar los scripts ubicados en la carpeta:
+
+```
+Database/
+```
+
+Posteriormente configurar las credenciales del archivo `.env` del backend.
+
+Ejemplo:
+
+```env
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=admin_general
+DB_PASSWORD=********
+DB_NAME=seg_egresado_bolsa
+
+JWT_SECRET=********
+```
+
+---
+
+# Ejecución del Sistema
+
+## Frontend
+
+Desde la raíz del proyecto:
+
+```bash
+npm run dev
+```
+
+Aplicación disponible en:
+
+```
+http://localhost:5173
+```
+
+---
+
+## Backend
+
+Abrir una nueva terminal:
+
+```bash
+cd backend
+npm run dev
+```
+
+API disponible en:
+
+```
+http://localhost:3001
+```
+
+---
+
+# Scripts Disponibles
+
+## Frontend
+
+```bash
+npm run dev
+npm run build
+npm run preview
+```
+
+## Backend
+
+```bash
+npm run dev
+npm run build
+npm start
+```
+
+---
+
+# Roles del Sistema
+
+## Administrador
+
+Permisos completos sobre:
+
+- Usuarios
+- Empresas
+- Egresados
+- Ofertas
+- Reportes
+- Configuración
+- Auditoría
+
+---
+
+## Empresa
+
+Puede:
+
+- Administrar sus ofertas laborales.
+- Gestionar postulaciones.
+- Editar su perfil.
+- Consultar su información.
+
+---
+
+## Egresado
+
+Puede:
+
+- Buscar ofertas.
+- Postular.
+- Gestionar su perfil.
+- Registrar historial laboral.
+- Completar encuestas.
+- Consultar su información.
+
+---
+
+# Base de Datos
+
+La solución implementa objetos avanzados de MySQL:
+
+- Procedimientos almacenados
+- Funciones
+- Vistas
+- Triggers de auditoría
+- Triggers de validación
+- Roles
+- Índices
+- Restricciones
+
+Estos objetos son utilizados desde el backend mediante llamadas SQL para centralizar la lógica de negocio.
+
+---
+
+# Funcionalidades Principales
+
+- Gestión de usuarios.
+- Gestión de egresados.
+- Gestión de empresas.
+- Bolsa de trabajo.
+- Postulaciones.
+- Historial laboral.
+- Encuestas de seguimiento.
+- Dashboard ejecutivo.
+- Reportes institucionales.
+- Exportación PDF, Excel y CSV.
+- Autenticación JWT.
+- Control de acceso por roles.
+
+---
+
+# Capturas
+
+Las capturas del sistema pueden incorporarse en esta sección para ilustrar las principales funcionalidades de la plataforma.
+
+---
+
+# Licencia
+
+Proyecto desarrollado con fines académicos para la Universidad de Huánuco.
